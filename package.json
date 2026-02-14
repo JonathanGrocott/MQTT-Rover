@@ -1,0 +1,14 @@
+{
+  "name": "mqtt-rover",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @mqtt-rover/client",
+    "build": "npm run build -w @mqtt-rover/client",
+    "typecheck": "npm run typecheck -w @mqtt-rover/client"
+  }
+}
