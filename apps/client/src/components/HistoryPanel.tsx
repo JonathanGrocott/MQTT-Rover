@@ -16,6 +16,7 @@ interface Props {
   focused: boolean;
   onToggleCollapsed: () => void;
   onToggleFocused: () => void;
+  onShowTimeline: () => void;
 }
 
 export function HistoryPanel({
@@ -24,13 +25,17 @@ export function HistoryPanel({
   collapsed,
   focused,
   onToggleCollapsed,
-  onToggleFocused
+  onToggleFocused,
+  onShowTimeline
 }: Props) {
   return (
     <section className={`panel history-panel ${collapsed ? "collapsed" : ""}`}>
       <header className="panel-header">
         <h2>History</h2>
         <div className="inline">
+          <button type="button" className="button-ghost" onClick={onShowTimeline}>
+            Timeline
+          </button>
           <button type="button" className="button-ghost" onClick={onToggleCollapsed}>
             {collapsed ? "Expand" : "Collapse"}
           </button>

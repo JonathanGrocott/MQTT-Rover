@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MessageEnvelope,
   OverloadMode,
-  PublishRequest
+  PublishRequest,
+  SubscriptionRequest
 } from "@mqtt-rover/protocol";
 import { ConnectionToolbar } from "./components/ConnectionToolbar";
 import { TopicTreePanel } from "./components/TopicTreePanel";
 import { PayloadPanel } from "./components/PayloadPanel";
 import { PublishPanel } from "./components/PublishPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
+import { TimelineEntry, TimelinePanel } from "./components/TimelinePanel";
 import { mqttRuntime } from "./lib/mqttRuntime";
 import { useActiveProfile, useAppStore } from "./store/useAppStore";
 
@@ -32,6 +34,12 @@ interface OverloadPreset {
   dropNonHistory: "evict-oldest" | "drop-incoming";
   dropHistory: "drop-oldest" | "drop-incoming";
 }
+
+interface ManagedSubscription extends SubscriptionRequest {
+  source: "initial" | "runtime";
+}
+
+type ViewPreset = "simple" | "advanced";
 
 const OVERLOAD_PRESETS: Record<OverloadMode, OverloadPreset> = {
   balanced: {
@@ -94,6 +102,36 @@ function queueLoad(
   return Math.max(coalescedRatio, historyRatio);
 }
 
+function resolveInitialSubscriptions(profile: {
+  subscriptionFilter?: string;
+  initialSubscriptions?: SubscriptionRequest[];
+}): SubscriptionRequest[] {
+  const configured =
+    profile.initialSubscriptions?.filter(
+      (entry) => entry.topicFilter.trim().length > 0
+    ) ?? [];
+
+  if (configured.length > 0) {
+    return configured;
+  }
+
+  return [{ topicFilter: profile.subscriptionFilter?.trim() || "#", qos: 0 }];
+}
+
+function readBooleanPreference(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+  const raw = window.localStorage.getItem(key);
+  if (raw === "1") {
+    return true;
+  }
+  if (raw === "0") {
+    return false;
+  }
+  return fallback;
+}
+
 export default function App() {
   const profile = useActiveProfile();
   const overloadMode: OverloadMode = profile?.overloadMode ?? "balanced";
@@ -103,6 +141,7 @@ export default function App() {
   const historyEnabledTopics = useAppStore((state) => state.historyEnabledTopics);
   const historyByTopic = useAppStore((state) => state.historyByTopic);
   const ingestMessages = useAppStore((state) => state.ingestMessages);
+  const connectionState = useAppStore((state) => state.connectionState);
   const setConnectionState = useAppStore((state) => state.setConnectionState);
   const clearRuntimeData = useAppStore((state) => state.clearRuntimeData);
   const toggleHistoryForTopic = useAppStore((state) => state.toggleHistoryForTopic);
@@ -110,6 +149,10 @@ export default function App() {
   const historyMessagesRef = useRef<MessageEnvelope[]>([]);
   const flushHandleRef = useRef<number | null>(null);
   const flushModeRef = useRef<"none" | "raf" | "timeout">("none");
+  const timelineQueueRef = useRef<TimelineEntry[]>([]);
+  const timelineNextIdRef = useRef(1);
+  const timelinePausedRef = useRef(false);
+  const timelineReplayTimerRef = useRef<number | null>(null);
   const droppedCoalescedRef = useRef(0);
   const droppedHistoryRef = useRef(0);
   const lastBatchSizeRef = useRef(0);
@@ -128,9 +171,28 @@ export default function App() {
     lastBatchSize: 0,
     lastFlushMs: 0
   });
-  const [connectionsCollapsed, setConnectionsCollapsed] = useState(false);
-  const [publishCollapsed, setPublishCollapsed] = useState(false);
-  const [historyCollapsed, setHistoryCollapsed] = useState(false);
+  const [subscriptions, setSubscriptions] = useState<ManagedSubscription[]>([]);
+  const [timelinePaused, setTimelinePaused] = useState(false);
+  const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
+  const [rightPanelView, setRightPanelView] = useState<"history" | "timeline">(
+    "history"
+  );
+  const [viewPreset, setViewPreset] = useState<ViewPreset>(() => {
+    if (typeof window === "undefined") {
+      return "simple";
+    }
+    const saved = window.localStorage.getItem("mqtt-rover.view-preset");
+    return saved === "advanced" ? "advanced" : "simple";
+  });
+  const [connectionsCollapsed, setConnectionsCollapsed] = useState(() =>
+    readBooleanPreference("mqtt-rover.panel.connections-collapsed", true)
+  );
+  const [publishCollapsed, setPublishCollapsed] = useState(() =>
+    readBooleanPreference("mqtt-rover.panel.publish-collapsed", true)
+  );
+  const [historyCollapsed, setHistoryCollapsed] = useState(() =>
+    readBooleanPreference("mqtt-rover.panel.history-collapsed", true)
+  );
   const [focusPanel, setFocusPanel] = useState<"none" | "publish" | "history">(
     "none"
   );
@@ -139,20 +201,13 @@ export default function App() {
   const [viewportWidth, setViewportWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1600
   );
-  const [leftColumnRatio, setLeftColumnRatio] = useState(0.34);
-  const [middleColumnRatio, setMiddleColumnRatio] = useState(0.38);
+  const [leftColumnRatio, setLeftColumnRatio] = useState(0.4);
+  const [middleColumnRatio, setMiddleColumnRatio] = useState(0.42);
   const [draggingColumn, setDraggingColumn] = useState<"none" | "left" | "right">(
     "none"
   );
   const middleColumnRef = useRef<HTMLDivElement | null>(null);
   const mainGridRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (window.innerHeight < 900) {
-      setConnectionsCollapsed(true);
-      setPublishCollapsed(true);
-    }
-  }, []);
 
   useEffect(() => {
     const onResize = () => {
@@ -163,6 +218,63 @@ export default function App() {
       window.removeEventListener("resize", onResize);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("mqtt-rover.view-preset", viewPreset);
+    if (viewPreset === "simple") {
+      setConnectionsCollapsed(true);
+      setFocusPanel("none");
+    }
+  }, [viewPreset]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      "mqtt-rover.panel.connections-collapsed",
+      connectionsCollapsed ? "1" : "0"
+    );
+  }, [connectionsCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      "mqtt-rover.panel.publish-collapsed",
+      publishCollapsed ? "1" : "0"
+    );
+  }, [publishCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      "mqtt-rover.panel.history-collapsed",
+      historyCollapsed ? "1" : "0"
+    );
+  }, [historyCollapsed]);
+
+  useEffect(() => {
+    if (publishCollapsed && focusPanel === "publish") {
+      setFocusPanel("none");
+    }
+  }, [publishCollapsed, focusPanel]);
+
+  useEffect(() => {
+    if (historyCollapsed && focusPanel === "history") {
+      setFocusPanel("none");
+    }
+  }, [historyCollapsed, focusPanel]);
+
+  useEffect(() => {
+    timelinePausedRef.current = timelinePaused;
+  }, [timelinePaused]);
 
   useEffect(() => {
     if (!draggingSplit) {
@@ -217,11 +329,16 @@ export default function App() {
       const xRatio = (event.clientX - bounds.left) / bounds.width;
 
       if (draggingColumn === "left") {
-        let nextLeft = Math.max(leftMin, Math.min(0.62, xRatio));
-        const maxLeft = 1 - middleColumnRatio - rightMin;
+        let nextLeft = Math.max(leftMin, Math.min(0.7, xRatio));
+        const maxLeft = historyCollapsed
+          ? 1 - middleMin
+          : 1 - middleColumnRatio - rightMin;
         nextLeft = Math.min(nextLeft, maxLeft);
         setLeftColumnRatio(nextLeft);
       } else if (draggingColumn === "right") {
+        if (historyCollapsed) {
+          return;
+        }
         let nextMiddle = xRatio - leftColumnRatio;
         const maxMiddle = 1 - leftColumnRatio - rightMin;
         nextMiddle = Math.max(middleMin, Math.min(maxMiddle, nextMiddle));
@@ -240,7 +357,7 @@ export default function App() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [draggingColumn, leftColumnRatio, middleColumnRatio]);
+  }, [draggingColumn, historyCollapsed, leftColumnRatio, middleColumnRatio]);
 
   const cancelScheduledFlush = () => {
     if (flushHandleRef.current === null) {
@@ -378,6 +495,18 @@ export default function App() {
     cancelScheduledFlush();
   };
 
+  const resetTimeline = () => {
+    if (timelineReplayTimerRef.current !== null) {
+      window.clearTimeout(timelineReplayTimerRef.current);
+      timelineReplayTimerRef.current = null;
+    }
+    timelineQueueRef.current = [];
+    timelineNextIdRef.current = 1;
+    timelinePausedRef.current = false;
+    setTimelineEntries([]);
+    setTimelinePaused(false);
+  };
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       const now = performance.now();
@@ -400,6 +529,45 @@ export default function App() {
     publishRuntimeStats();
   }, [overloadMode]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (timelinePausedRef.current) {
+        return;
+      }
+      const pending = timelineQueueRef.current;
+      if (pending.length === 0) {
+        return;
+      }
+      timelineQueueRef.current = [];
+      setTimelineEntries((current) => {
+        const next = [...current, ...pending];
+        if (next.length <= 4000) {
+          return next;
+        }
+        return next.slice(next.length - 4000);
+      });
+    }, 220);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (timelineReplayTimerRef.current !== null) {
+        window.clearTimeout(timelineReplayTimerRef.current);
+        timelineReplayTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (connectionState !== "connected") {
+      setSubscriptions([]);
+    }
+  }, [connectionState]);
+
   const selectedSnapshot = selectedTopic ? topics.get(selectedTopic) : undefined;
   const selectedHistory = selectedTopic
     ? historyByTopic.get(selectedTopic) ?? []
@@ -418,22 +586,41 @@ export default function App() {
     }
 
     resetRuntimeBuffers();
+    resetTimeline();
     publishRuntimeStats();
 
     clearRuntimeData();
     setConnectionState("connecting");
 
     try {
+      const initialSubscriptions = resolveInitialSubscriptions(profile);
       const connectProfile = {
         ...profile,
-        subscriptionFilter: profile.subscriptionFilter?.trim() || "#"
+        subscriptionFilter: profile.subscriptionFilter?.trim() || "#",
+        initialSubscriptions
       };
       await mqttRuntime.connect(connectProfile, {
         onMessage: (message) => {
+          if (!timelinePausedRef.current) {
+            timelineQueueRef.current.push({
+              id: timelineNextIdRef.current++,
+              message
+            });
+          }
           enqueueMessage(message);
         },
         onState: (state) => {
           setConnectionState(state);
+          if (state === "connected") {
+            setSubscriptions(
+              connectProfile.initialSubscriptions.map((entry) => ({
+                ...entry,
+                source: "initial"
+              }))
+            );
+          } else if (state === "disconnected") {
+            setSubscriptions([]);
+          }
         },
         onError: (message) => {
           setConnectionState("error", message);
@@ -448,25 +635,137 @@ export default function App() {
   const disconnect = async () => {
     await mqttRuntime.disconnect();
     resetRuntimeBuffers();
+    resetTimeline();
     publishRuntimeStats();
     setConnectionState("disconnected");
+    setSubscriptions([]);
   };
 
   const publish = async (request: PublishRequest) => {
     await mqttRuntime.publish(request);
   };
 
+  const subscribe = async (request: SubscriptionRequest) => {
+    await mqttRuntime.subscribe(request);
+    setSubscriptions((current) => {
+      const existingIndex = current.findIndex(
+        (entry) => entry.topicFilter === request.topicFilter
+      );
+      if (existingIndex >= 0) {
+        const next = [...current];
+        next[existingIndex] = { ...request, source: "runtime" };
+        return next;
+      }
+      return [...current, { ...request, source: "runtime" }];
+    });
+  };
+
+  const unsubscribe = async (topicFilter: string) => {
+    await mqttRuntime.unsubscribe(topicFilter);
+    setSubscriptions((current) =>
+      current.filter((entry) => entry.topicFilter !== topicFilter)
+    );
+  };
+
+  const importTimelineSession = (
+    imported: MessageEnvelope[],
+    mode: "append" | "replace" | "replay"
+  ) => {
+    if (imported.length === 0) {
+      return;
+    }
+
+    const appendMessages = (messages: MessageEnvelope[]) => {
+      setTimelineEntries((current) => {
+        const mapped = messages.map((message) => ({
+          id: timelineNextIdRef.current++,
+          message
+        }));
+        const next = [...current, ...mapped];
+        if (next.length <= 4000) {
+          return next;
+        }
+        return next.slice(next.length - 4000);
+      });
+    };
+
+    if (mode === "append") {
+      appendMessages(imported);
+      return;
+    }
+
+    if (mode === "replace") {
+      if (timelineReplayTimerRef.current !== null) {
+        window.clearTimeout(timelineReplayTimerRef.current);
+        timelineReplayTimerRef.current = null;
+      }
+      timelineQueueRef.current = [];
+      timelineNextIdRef.current = 1;
+      setTimelineEntries(
+        imported.slice(-4000).map((message) => ({
+          id: timelineNextIdRef.current++,
+          message
+        }))
+      );
+      return;
+    }
+
+    const replayList = [...imported].sort((left, right) => left.timestamp - right.timestamp);
+    if (timelineReplayTimerRef.current !== null) {
+      window.clearTimeout(timelineReplayTimerRef.current);
+      timelineReplayTimerRef.current = null;
+    }
+    timelineQueueRef.current = [];
+    timelineNextIdRef.current = 1;
+    setTimelineEntries([]);
+
+    const pausedBeforeReplay = timelinePausedRef.current;
+    setTimelinePaused(true);
+
+    let index = 0;
+    const pushNext = () => {
+      if (index >= replayList.length) {
+        timelineReplayTimerRef.current = null;
+        setTimelinePaused(pausedBeforeReplay);
+        return;
+      }
+
+      const current = replayList[index];
+      if (current) {
+        appendMessages([current]);
+      }
+      index += 1;
+
+      if (index >= replayList.length) {
+        timelineReplayTimerRef.current = null;
+        setTimelinePaused(pausedBeforeReplay);
+        return;
+      }
+
+      const next = replayList[index];
+      const delay = next
+        ? Math.max(20, Math.min(280, next.timestamp - (current?.timestamp ?? next.timestamp)))
+        : 40;
+      timelineReplayTimerRef.current = window.setTimeout(pushNext, delay);
+    };
+
+    pushNext();
+  };
+
   const middleColumnRows =
     focusPanel === "publish"
       ? "1fr"
       : publishCollapsed
-        ? "1fr auto"
+        ? "1fr"
         : `${payloadSplit}fr 10px ${1 - payloadSplit}fr`;
 
-  const showColumnResizers = focusPanel === "none" && viewportWidth > 1400;
+  const showLeftResizer = focusPanel === "none" && viewportWidth > 1400;
+  const showRightResizer = showLeftResizer && !historyCollapsed;
   const rightColumnRatio = Math.max(0.18, 1 - leftColumnRatio - middleColumnRatio);
-  const mainGridTemplate = showColumnResizers
-    ? `${leftColumnRatio}fr 10px ${middleColumnRatio}fr 10px ${rightColumnRatio}fr`
+  const mainGridTemplate = showLeftResizer
+    ? historyCollapsed
+      ? `${leftColumnRatio}fr 10px ${1 - leftColumnRatio}fr`
+      : `${leftColumnRatio}fr 10px ${middleColumnRatio}fr 10px ${rightColumnRatio}fr`
     : undefined;
 
   return (
@@ -475,16 +774,49 @@ export default function App() {
         draggingColumn !== "none" ? "resizing-x" : ""
       }`}
     >
-      <ConnectionToolbar
-        profile={profile}
-        collapsed={connectionsCollapsed}
-        onToggleCollapsed={() =>
-          setConnectionsCollapsed((current) => !current)
-        }
-        runtimeStats={runtimeStats}
-        onConnect={connect}
-        onDisconnect={disconnect}
-      />
+      <div className="workspace-strip">
+        <button
+          type="button"
+          className={connectionsCollapsed ? "button-ghost" : "button-primary"}
+          onClick={() => setConnectionsCollapsed((current) => !current)}
+        >
+          {connectionsCollapsed ? "Show Connections" : "Hide Connections"}
+        </button>
+        <button
+          type="button"
+          className={publishCollapsed ? "button-ghost" : "button-primary"}
+          onClick={() => setPublishCollapsed((current) => !current)}
+        >
+          {publishCollapsed ? "Show Publish" : "Hide Publish"}
+        </button>
+        <button
+          type="button"
+          className={historyCollapsed ? "button-ghost" : "button-primary"}
+          onClick={() => setHistoryCollapsed((current) => !current)}
+        >
+          {historyCollapsed ? "Show History/Timeline" : "Hide History/Timeline"}
+        </button>
+        <span className="workspace-strip-note">
+          Prioritize Topic Explorer + Payload Viewer
+        </span>
+      </div>
+
+      {!connectionsCollapsed ? (
+        <ConnectionToolbar
+          profile={profile}
+          viewPreset={viewPreset}
+          onChangeViewPreset={setViewPreset}
+          collapsed={false}
+          onToggleCollapsed={() => setConnectionsCollapsed(true)}
+          runtimeStats={runtimeStats}
+          onConnect={connect}
+          onDisconnect={disconnect}
+          subscriptions={subscriptions}
+          subscriptionsDisabled={connectionState !== "connected"}
+          onSubscribe={subscribe}
+          onUnsubscribe={unsubscribe}
+        />
+      ) : null}
 
       <section
         ref={mainGridRef}
@@ -497,7 +829,7 @@ export default function App() {
       >
         <TopicTreePanel selectedTopic={selectedTopic} topics={topics} />
 
-        {showColumnResizers ? (
+        {showLeftResizer ? (
           <div
             className="panel-resize-handle vertical"
             role="separator"
@@ -546,26 +878,31 @@ export default function App() {
             </div>
           ) : null}
 
-          <PublishPanel
-            selectedTopic={selectedTopic}
-            collapsed={publishCollapsed}
-            focused={focusPanel === "publish"}
-            onToggleCollapsed={() =>
-              setPublishCollapsed((current) => !current)
-            }
-            onToggleFocused={() => {
-              setPublishCollapsed(false);
-              setFocusPanel((current) =>
-                current === "publish" ? "none" : "publish"
-              );
-            }}
-            onPublish={async (request) => {
-              await publish(request);
-            }}
-          />
+          {!publishCollapsed ? (
+            <PublishPanel
+              selectedTopic={selectedTopic}
+              mqtt5Enabled={(profile?.mqttProtocolVersion ?? 4) === 5}
+              advancedMode={viewPreset === "advanced"}
+              collapsed={false}
+              focused={focusPanel === "publish"}
+              onToggleCollapsed={() => {
+                setPublishCollapsed(true);
+                setFocusPanel("none");
+              }}
+              onToggleFocused={() => {
+                setPublishCollapsed(false);
+                setFocusPanel((current) =>
+                  current === "publish" ? "none" : "publish"
+                );
+              }}
+              onPublish={async (request) => {
+                await publish(request);
+              }}
+            />
+          ) : null}
         </div>
 
-        {showColumnResizers ? (
+        {showRightResizer ? (
           <div
             className="panel-resize-handle vertical"
             role="separator"
@@ -580,21 +917,60 @@ export default function App() {
           </div>
         ) : null}
 
-        <HistoryPanel
-          topic={selectedTopic}
-          data={selectedHistory}
-          collapsed={historyCollapsed}
-          focused={focusPanel === "history"}
-          onToggleCollapsed={() =>
-            setHistoryCollapsed((current) => !current)
-          }
-          onToggleFocused={() => {
-            setHistoryCollapsed(false);
-            setFocusPanel((current) =>
-              current === "history" ? "none" : "history"
-            );
-          }}
-        />
+        {!historyCollapsed
+          ? rightPanelView === "history"
+            ? (
+              <HistoryPanel
+                topic={selectedTopic}
+                data={selectedHistory}
+                collapsed={false}
+                focused={focusPanel === "history"}
+                onToggleCollapsed={() => {
+                  setHistoryCollapsed(true);
+                  setFocusPanel("none");
+                }}
+                onToggleFocused={() => {
+                  setHistoryCollapsed(false);
+                  setFocusPanel((current) =>
+                    current === "history" ? "none" : "history"
+                  );
+                }}
+                onShowTimeline={() => setRightPanelView("timeline")}
+              />
+            )
+            : (
+              <TimelinePanel
+                messages={timelineEntries}
+                advancedMode={viewPreset === "advanced"}
+                collapsed={false}
+                focused={focusPanel === "history"}
+                paused={timelinePaused}
+                onToggleCollapsed={() => {
+                  setHistoryCollapsed(true);
+                  setFocusPanel("none");
+                }}
+                onToggleFocused={() => {
+                  setHistoryCollapsed(false);
+                  setFocusPanel((current) =>
+                    current === "history" ? "none" : "history"
+                  );
+                }}
+                onTogglePaused={() => {
+                  setTimelinePaused((current) => !current);
+                }}
+                onClear={() => {
+                  if (timelineReplayTimerRef.current !== null) {
+                    window.clearTimeout(timelineReplayTimerRef.current);
+                    timelineReplayTimerRef.current = null;
+                  }
+                  timelineQueueRef.current = [];
+                  setTimelineEntries([]);
+                }}
+                onImportSession={importTimelineSession}
+                onShowHistory={() => setRightPanelView("history")}
+              />
+            )
+          : null}
       </section>
     </main>
   );

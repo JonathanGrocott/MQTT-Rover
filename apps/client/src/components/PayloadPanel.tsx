@@ -16,6 +16,8 @@ interface Props {
   onPublishRetained: (topic: string, payload: string) => Promise<void>;
 }
 
+type PayloadView = "json" | "utf8" | "hex" | "sparkplug" | "mqtt5";
+
 export function PayloadPanel({
   topic,
   snapshot,
@@ -25,6 +27,7 @@ export function PayloadPanel({
 }: Props) {
   const [retainedDraft, setRetainedDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [activeView, setActiveView] = useState<PayloadView>("json");
 
   useEffect(() => {
     if (!snapshot) {
@@ -52,6 +55,29 @@ export function PayloadPanel({
     }
     return decodeSparkplugPayload(snapshot.payload);
   }, [snapshot, topic]);
+  const viewContent = useMemo(
+    () => ({
+      json: asJson ? JSON.stringify(asJson, null, 2) : "Not valid JSON payload",
+      utf8: payloadText || "<empty>",
+      hex: asHex || "<empty>",
+      sparkplug: sparkplug
+        ? JSON.stringify(sparkplug, null, 2)
+        : "Not Sparkplug B payload or decode failed",
+      mqtt5: snapshot?.mqtt5
+        ? JSON.stringify(snapshot.mqtt5, null, 2)
+        : "No MQTT5 properties captured"
+    }),
+    [asHex, asJson, payloadText, snapshot?.mqtt5, sparkplug]
+  );
+
+  useEffect(() => {
+    setActiveView((current) => {
+      if (current === "hex" || current === "sparkplug" || current === "mqtt5") {
+        return current;
+      }
+      return asJson ? "json" : "utf8";
+    });
+  }, [topic, snapshot, asJson]);
 
   if (!topic || !snapshot) {
     return (
@@ -90,52 +116,73 @@ export function PayloadPanel({
         </span>
       </div>
 
-      <div className="payload-grid">
-        <div>
-          <h3>UTF-8</h3>
-          <pre>{payloadText || "<empty>"}</pre>
-        </div>
-        <div>
-          <h3>JSON</h3>
-          <pre>{asJson ? JSON.stringify(asJson, null, 2) : "Not valid JSON"}</pre>
-        </div>
-        <div>
-          <h3>HEX</h3>
-          <pre>{asHex}</pre>
-        </div>
-        <div>
-          <h3>Sparkplug B</h3>
-          <pre>
-            {sparkplug
-              ? JSON.stringify(sparkplug, null, 2)
-              : "Not Sparkplug B payload or decode failed"}
-          </pre>
-        </div>
-      </div>
-
-      <div className="retained-editor">
-        <h3>Retained Editor</h3>
-        <textarea
-          rows={5}
-          value={retainedDraft}
-          onChange={(event) => setRetainedDraft(event.target.value)}
-        />
+      <div className="payload-view-switcher">
         <button
-          className="button-primary"
           type="button"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              await onPublishRetained(topic, retainedDraft);
-            } finally {
-              setBusy(false);
-            }
-          }}
+          className={activeView === "json" ? "button-primary" : "button-ghost"}
+          onClick={() => setActiveView("json")}
         >
-          Publish Retained to Selected Topic
+          JSON
+        </button>
+        <button
+          type="button"
+          className={activeView === "utf8" ? "button-primary" : "button-ghost"}
+          onClick={() => setActiveView("utf8")}
+        >
+          UTF-8
+        </button>
+        <button
+          type="button"
+          className={activeView === "hex" ? "button-primary" : "button-ghost"}
+          onClick={() => setActiveView("hex")}
+        >
+          HEX
+        </button>
+        <button
+          type="button"
+          className={activeView === "sparkplug" ? "button-primary" : "button-ghost"}
+          onClick={() => setActiveView("sparkplug")}
+        >
+          Sparkplug
+        </button>
+        <button
+          type="button"
+          className={activeView === "mqtt5" ? "button-primary" : "button-ghost"}
+          onClick={() => setActiveView("mqtt5")}
+        >
+          MQTT5
         </button>
       </div>
+
+      <div className="payload-viewer">
+        <pre>{viewContent[activeView]}</pre>
+      </div>
+
+      <details className="retained-editor">
+        <summary>Retained Editor</summary>
+        <div className="retained-editor-body">
+          <textarea
+            rows={5}
+            value={retainedDraft}
+            onChange={(event) => setRetainedDraft(event.target.value)}
+          />
+          <button
+            className="button-primary"
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await onPublishRetained(topic, retainedDraft);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Publish Retained to Selected Topic
+          </button>
+        </div>
+      </details>
     </section>
   );
 }

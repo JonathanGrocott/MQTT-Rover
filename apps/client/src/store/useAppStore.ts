@@ -4,6 +4,7 @@ import {
   ConnectionProfile,
   ConnectionState,
   MessageEnvelope,
+  SubscriptionRequest,
   tryExtractNumericValue
 } from "@mqtt-rover/protocol";
 
@@ -20,6 +21,7 @@ export interface TopicSnapshot {
   qos: 0 | 1 | 2;
   retain: boolean;
   timestamp: number;
+  mqtt5?: MessageEnvelope["mqtt5"];
   preview: string;
   messageCount: number;
 }
@@ -77,6 +79,7 @@ const defaultProfile = (): ConnectionProfile => ({
   id: createId(),
   name: "Local Mosquitto",
   protocol: "ws",
+  mqttProtocolVersion: 4,
   host: "localhost",
   port: 9001,
   path: "/mqtt",
@@ -84,6 +87,7 @@ const defaultProfile = (): ConnectionProfile => ({
   keepalive: 30,
   reconnectPeriodMs: 1000,
   subscriptionFilter: "#",
+  initialSubscriptions: [{ topicFilter: "#", qos: 0 }],
   overloadMode: "balanced",
   useMtls: false
 });
@@ -96,10 +100,42 @@ function createId(): string {
 }
 
 function normalizeProfile(profile: ConnectionProfile): ConnectionProfile {
+  const normalizedInitialSubscriptions =
+    profile.initialSubscriptions
+      ?.map((entry): SubscriptionRequest | null => {
+        const topicFilter = entry.topicFilter?.trim();
+        if (!topicFilter) {
+          return null;
+        }
+        return {
+          topicFilter,
+          qos: entry.qos ?? 0,
+          mqtt5: entry.mqtt5
+        };
+      })
+      .filter((entry): entry is SubscriptionRequest => Boolean(entry)) ?? [];
+
   const subscriptionFilter = profile.subscriptionFilter?.trim();
+  if (normalizedInitialSubscriptions.length === 0) {
+    normalizedInitialSubscriptions.push({
+      topicFilter:
+        subscriptionFilter && subscriptionFilter.length > 0
+          ? subscriptionFilter
+          : "#",
+      qos: 0
+    });
+  }
+
+  const primaryFilter = normalizedInitialSubscriptions[0]?.topicFilter ?? "#";
+
   return {
     ...profile,
-    subscriptionFilter: subscriptionFilter && subscriptionFilter.length > 0 ? subscriptionFilter : "#",
+    mqttProtocolVersion: profile.mqttProtocolVersion ?? 4,
+    subscriptionFilter:
+      subscriptionFilter && subscriptionFilter.length > 0
+        ? subscriptionFilter
+        : primaryFilter,
+    initialSubscriptions: normalizedInitialSubscriptions,
     overloadMode: profile.overloadMode ?? "balanced"
   };
 }
@@ -256,6 +292,7 @@ export const useAppStore = create<AppState>()(
             qos: message.qos,
             retain: message.retain,
             timestamp: message.timestamp,
+            mqtt5: message.mqtt5,
             preview: payloadPreview(message.payload),
             messageCount: (existingSnapshot?.messageCount ?? 0) + 1
           });

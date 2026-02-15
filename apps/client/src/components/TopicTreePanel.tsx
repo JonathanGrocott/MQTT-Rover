@@ -8,7 +8,7 @@ interface Props {
   topics: Map<string, TopicSnapshot>;
 }
 
-const ROW_HEIGHT = 30;
+const ROW_HEIGHT = 26;
 const RECENT_MS = 1400;
 
 export function TopicTreePanel({ selectedTopic, topics }: Props) {

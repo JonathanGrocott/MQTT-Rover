@@ -4,11 +4,17 @@ MQTT Rover is a modern MQTT explorer designed for web and desktop.
 
 Current milestone implements:
 - Connection profiles (persisted locally)
-- Connection-time wildcard subscription filters
+- Initial subscription list with per-filter QoS (applied on connect)
+- Runtime subscription manager (add/remove topic filters with QoS)
 - Topic tree explorer with worker-based indexing + virtualized rendering
 - Live payload viewer (UTF-8, JSON, HEX)
+- Timeline workflow panel (pause, filter, diff A/B payloads, export JSONL)
+- Timeline bookmarks + advanced filter drawer (payload/QoS/retain/MQTT5/regex)
+- Timeline session import + replay from JSONL/NDJSON exports
 - Sparkplug B decode (payload decode-only)
-- Publish panel (QoS + retain)
+- Publish panel (QoS + retain + MQTT5 publish properties inspector)
+- Clean-by-default controls with collapsible advanced sections/toolbars
+- Workspace view presets (`Simple` / `Advanced`) persisted locally
 - Retained editor for selected topic
 - Opt-in per-topic history capture with charting
 - Runtime backpressure telemetry chips (msg/s, queue depth, coalescing, flush cost, drops)
@@ -51,6 +57,7 @@ Desktop transport implementation lives under `apps/client/src-tauri`:
 - `mqtt` and `mqtts` supported through Rust (`rumqttc`)
 - Username/password supported
 - mTLS supported for `mqtts` when CA + client cert + client key PEM values are provided
+- MQTT5 connection, publish, subscribe, and incoming publish-property metadata supported
 
 Notes:
 - Rust toolchain is required for desktop (`rustc`/`cargo`). Install with `rustup` and source `$HOME/.cargo/env`.
