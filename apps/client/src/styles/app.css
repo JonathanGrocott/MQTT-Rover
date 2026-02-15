@@ -55,6 +55,16 @@ p {
   overflow: hidden;
 }
 
+.app-shell.resizing-y {
+  user-select: none;
+  cursor: ns-resize;
+}
+
+.app-shell.resizing-x {
+  user-select: none;
+  cursor: ew-resize;
+}
+
 .connection-toolbar {
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -249,6 +259,40 @@ button:disabled {
   gap: 10px;
   grid-template-rows: minmax(300px, 2fr) minmax(220px, 1fr);
   overflow: hidden;
+}
+
+.middle-column {
+  gap: 0;
+}
+
+.panel-resize-handle {
+  display: grid;
+  place-items: center;
+}
+
+.panel-resize-handle.horizontal {
+  height: 10px;
+  cursor: ns-resize;
+}
+
+.panel-resize-handle.vertical {
+  width: 10px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.panel-resize-handle.horizontal span {
+  width: 60px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(124, 181, 221, 0.5);
+}
+
+.panel-resize-handle.vertical span {
+  width: 4px;
+  height: 64px;
+  border-radius: 999px;
+  background: rgba(124, 181, 221, 0.5);
 }
 
 .panel {

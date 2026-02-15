@@ -143,6 +143,11 @@ fn mqtt_options_from_profile(profile: &TcpProfile) -> Result<MqttOptions, String
     Ok(options)
 }
 
+fn emit_runtime_error(app: &tauri::AppHandle, message: &str) {
+    let _ = app.emit("mqtt://error", message.to_string());
+    let _ = app.emit("mqtt://status", "error");
+}
+
 #[tauri::command]
 async fn connect_tcp(
     app: tauri::AppHandle,
@@ -150,32 +155,50 @@ async fn connect_tcp(
     profile: TcpProfile,
 ) -> Result<(), String> {
     if profile.protocol != "mqtt" && profile.protocol != "mqtts" {
-        return Err(format!(
+        let message = format!(
             "Invalid protocol '{}' for desktop transport (expected mqtt/mqtts)",
             profile.protocol
-        ));
+        );
+        emit_runtime_error(&app, &message);
+        return Err(message);
     }
 
     app.emit("mqtt://status", "connecting")
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| {
+            let message = error.to_string();
+            emit_runtime_error(&app, &message);
+            message
+        })?;
 
     let existing_session = {
         let mut guard = runtime
             .session
             .lock()
-            .map_err(|_| "Runtime lock poisoned".to_string())?;
+            .map_err(|_| {
+                let message = "Runtime lock poisoned".to_string();
+                emit_runtime_error(&app, &message);
+                message
+            })?;
         guard.take()
     };
     if let Some(session) = existing_session {
         disconnect_session(session);
     }
 
-    let options = mqtt_options_from_profile(&profile)?;
+    let options = match mqtt_options_from_profile(&profile) {
+        Ok(value) => value,
+        Err(message) => {
+            emit_runtime_error(&app, &message);
+            return Err(message);
+        }
+    };
     let subscription_filter = non_empty(&profile.subscription_filter).unwrap_or("#".to_string());
     let (client, mut connection) = Client::new(options, 1024);
-    client
-        .subscribe(subscription_filter, QoS::AtMostOnce)
-        .map_err(|error| format!("Subscribe failed: {}", error))?;
+    if let Err(error) = client.subscribe(subscription_filter, QoS::AtMostOnce) {
+        let message = format!("Subscribe failed: {}", error);
+        emit_runtime_error(&app, &message);
+        return Err(message);
+    }
 
     let stop = Arc::new(AtomicBool::new(false));
     let stop_for_worker = stop.clone();
@@ -227,7 +250,11 @@ async fn connect_tcp(
         let mut guard = runtime
             .session
             .lock()
-            .map_err(|_| "Runtime lock poisoned".to_string())?;
+            .map_err(|_| {
+                let message = "Runtime lock poisoned".to_string();
+                emit_runtime_error(&app, &message);
+                message
+            })?;
         *guard = Some(next_session);
     }
 

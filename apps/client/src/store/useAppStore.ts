@@ -29,6 +29,11 @@ export interface HistoryPoint {
   value: number;
 }
 
+export interface TopicCountDelta {
+  topic: string;
+  deltaMessages: number;
+}
+
 interface PersistedSlice {
   profiles: ConnectionProfile[];
   activeProfileId: string | null;
@@ -50,6 +55,8 @@ interface AppState {
   historyEnabledTopics: Set<string>;
   historyByTopic: Map<string, HistoryPoint[]>;
   pendingNewTopics: string[];
+  pendingTopicCountDeltas: TopicCountDelta[];
+  topicStatsRevision: number;
   setConnectionState: (state: ConnectionState, error?: string | null) => void;
   setSearchTerm: (value: string) => void;
   setSelectedTopic: (topic: string | null) => void;
@@ -61,6 +68,7 @@ interface AppState {
   updateActiveProfile: (patch: Partial<ConnectionProfile>) => void;
   ingestMessages: (messages: MessageEnvelope[]) => void;
   drainPendingNewTopics: () => string[];
+  drainPendingTopicCountDeltas: () => TopicCountDelta[];
   clearRuntimeData: () => void;
   toggleHistoryForTopic: (topic: string) => void;
 }
@@ -141,6 +149,8 @@ export const useAppStore = create<AppState>()(
       historyEnabledTopics: new Set<string>(),
       historyByTopic: new Map<string, HistoryPoint[]>(),
       pendingNewTopics: [],
+      pendingTopicCountDeltas: [],
+      topicStatsRevision: 0,
 
       setConnectionState: (state, error = null) => {
         set({ connectionState: state, connectionError: error });
@@ -234,6 +244,7 @@ export const useAppStore = create<AppState>()(
         const historyByTopic = new Map(get().historyByTopic);
         const enabledHistory = get().historyEnabledTopics;
         const newTopics: string[] = [];
+        const deltaByTopic = new Map<string, number>();
 
         for (const message of messages) {
           const existingSnapshot = topics.get(message.topic);
@@ -252,6 +263,7 @@ export const useAppStore = create<AppState>()(
           if (!alreadySeen) {
             newTopics.push(message.topic);
           }
+          deltaByTopic.set(message.topic, (deltaByTopic.get(message.topic) ?? 0) + 1);
 
           if (enabledHistory.has(message.topic)) {
             const numeric = tryExtractNumericValue(message.payload);
@@ -269,6 +281,9 @@ export const useAppStore = create<AppState>()(
           }
         }
 
+        const topicCountDeltas: TopicCountDelta[] = Array.from(deltaByTopic.entries()).map(
+          ([topic, deltaMessages]) => ({ topic, deltaMessages })
+        );
         const previous = get();
         set({
           topics,
@@ -277,8 +292,16 @@ export const useAppStore = create<AppState>()(
             newTopics.length > 0
               ? [...previous.pendingNewTopics, ...newTopics]
               : previous.pendingNewTopics,
+          pendingTopicCountDeltas:
+            topicCountDeltas.length > 0
+              ? [...previous.pendingTopicCountDeltas, ...topicCountDeltas]
+              : previous.pendingTopicCountDeltas,
           topicRevision:
-            newTopics.length > 0 ? previous.topicRevision + 1 : previous.topicRevision
+            newTopics.length > 0 ? previous.topicRevision + 1 : previous.topicRevision,
+          topicStatsRevision:
+            topicCountDeltas.length > 0
+              ? previous.topicStatsRevision + 1
+              : previous.topicStatsRevision
         });
       },
 
@@ -290,15 +313,25 @@ export const useAppStore = create<AppState>()(
         return pending;
       },
 
+      drainPendingTopicCountDeltas: () => {
+        const pending = get().pendingTopicCountDeltas;
+        if (pending.length > 0) {
+          set({ pendingTopicCountDeltas: [] });
+        }
+        return pending;
+      },
+
       clearRuntimeData: () => {
         set({
           connectionError: null,
           root: createRoot(),
           topics: new Map<string, TopicSnapshot>(),
           topicRevision: get().topicRevision + 1,
+          topicStatsRevision: get().topicStatsRevision + 1,
           selectedTopic: null,
           historyByTopic: new Map<string, HistoryPoint[]>(),
-          pendingNewTopics: []
+          pendingNewTopics: [],
+          pendingTopicCountDeltas: []
         });
       },
 

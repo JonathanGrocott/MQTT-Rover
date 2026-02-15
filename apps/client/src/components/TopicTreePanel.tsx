@@ -18,6 +18,7 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
   const toggleExpanded = useAppStore((state) => state.toggleExpanded);
   const setSelectedTopic = useAppStore((state) => state.setSelectedTopic);
   const topicRevision = useAppStore((state) => state.topicRevision);
+  const topicStatsRevision = useAppStore((state) => state.topicStatsRevision);
   const [rows, setRows] = useState<TopicRow[]>([]);
   const [totalRows, setTotalRows] = useState(0);
   const [nowTick, setNowTick] = useState(Date.now());
@@ -53,10 +54,18 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
       setTotalRows(payload.totalRows);
     };
 
-    const initialTopics = Array.from(useAppStore.getState().topics.keys());
+    const initialSnapshots = Array.from(useAppStore.getState().topics.values());
+    const initialTopics = initialSnapshots.map((entry) => entry.topic);
     worker.postMessage({ type: "reset" });
     if (initialTopics.length > 0) {
       worker.postMessage({ type: "add-topics", topics: initialTopics });
+      worker.postMessage({
+        type: "update-topic-counts",
+        updates: initialSnapshots.map((entry) => ({
+          topic: entry.topic,
+          deltaMessages: entry.messageCount
+        }))
+      });
     }
 
     return () => {
@@ -75,6 +84,10 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
     if (pendingTopics.length > 0) {
       worker.postMessage({ type: "add-topics", topics: pendingTopics });
     }
+    const pendingTopicDeltas = useAppStore.getState().drainPendingTopicCountDeltas();
+    if (pendingTopicDeltas.length > 0) {
+      worker.postMessage({ type: "update-topic-counts", updates: pendingTopicDeltas });
+    }
 
     requestIdRef.current += 1;
     worker.postMessage({
@@ -83,7 +96,7 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
       expandedPaths: Array.from(expandedPaths),
       searchTerm
     });
-  }, [expandedPaths, searchTerm, topicRevision]);
+  }, [expandedPaths, searchTerm, topicRevision, topicStatsRevision]);
 
   const { containerRef, visibleItems, topPadding, bottomPadding } = useVirtualRows(
     rows,
@@ -140,7 +153,9 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
                   <span className="topic-preview">= {topic.preview}</span>
                 ) : null}
                 {!item.isLeaf ? (
-                  <span className="branch-meta">{item.childCount} children</span>
+                  <span className="branch-meta">
+                    {item.topicCount} topics, {item.messageCount} messages
+                  </span>
                 ) : null}
               </span>
               {item.isLeaf && topic ? (

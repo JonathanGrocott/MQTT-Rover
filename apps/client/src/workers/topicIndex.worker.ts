@@ -11,22 +11,37 @@ interface TopicNode {
   fullPath: string;
   children: Map<string, TopicNode>;
   isLeaf: boolean;
+  topicCount: number;
+  messageCount: number;
 }
 
 const root: TopicNode = {
   name: "",
   fullPath: "",
   children: new Map<string, TopicNode>(),
-  isLeaf: false
+  isLeaf: false,
+  topicCount: 0,
+  messageCount: 0
 };
+
+const knownLeafTopics = new Set<string>();
 
 function resetTree(): void {
   root.children.clear();
+  root.topicCount = 0;
+  root.messageCount = 0;
+  knownLeafTopics.clear();
 }
 
 function insertTopic(topic: string): void {
+  if (knownLeafTopics.has(topic)) {
+    return;
+  }
+  knownLeafTopics.add(topic);
+
   const segments = topic.split("/");
   let cursor = root;
+  const pathNodes: TopicNode[] = [];
 
   for (let index = 0; index < segments.length; index += 1) {
     const name = segments[index] ?? "";
@@ -38,7 +53,9 @@ function insertTopic(topic: string): void {
         name,
         fullPath,
         children: new Map<string, TopicNode>(),
-        isLeaf: false
+        isLeaf: false,
+        topicCount: 0,
+        messageCount: 0
       };
       cursor.children.set(name, child);
     }
@@ -48,6 +65,31 @@ function insertTopic(topic: string): void {
     }
 
     cursor = child;
+    pathNodes.push(child);
+  }
+
+  for (const node of pathNodes) {
+    node.topicCount += 1;
+  }
+}
+
+function incrementTopicMessageCount(topic: string, deltaMessages: number): void {
+  if (deltaMessages <= 0) {
+    return;
+  }
+
+  const segments = topic.split("/");
+  let cursor = root;
+  cursor.messageCount += deltaMessages;
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const name = segments[index] ?? "";
+    const next = cursor.children.get(name);
+    if (!next) {
+      return;
+    }
+    next.messageCount += deltaMessages;
+    cursor = next;
   }
 }
 
@@ -73,6 +115,8 @@ function walkVisible(
       isLeaf: child.isLeaf,
       hasChildren,
       childCount: child.children.size,
+      topicCount: child.topicCount,
+      messageCount: child.messageCount,
       expanded: isExpanded
     });
 
@@ -93,6 +137,8 @@ function walkLeaves(node: TopicNode, filter: string, rows: TopicRow[]): void {
         isLeaf: true,
         hasChildren: false,
         childCount: 0,
+        topicCount: 1,
+        messageCount: child.messageCount,
         expanded: false
       });
     }
@@ -128,6 +174,12 @@ self.onmessage = (event: MessageEvent<TopicWorkerRequest>) => {
     case "add-topics": {
       for (const topic of message.topics) {
         insertTopic(topic);
+      }
+      break;
+    }
+    case "update-topic-counts": {
+      for (const update of message.updates) {
+        incrementTopicMessageCount(update.topic, update.deltaMessages);
       }
       break;
     }

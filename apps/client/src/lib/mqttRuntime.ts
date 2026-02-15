@@ -21,6 +21,33 @@ interface TauriIncomingMessage {
   timestamp: number;
 }
 
+function extractErrorMessage(error: unknown): string {
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  if (error && typeof error === "object") {
+    const withMessage = error as { message?: unknown; payload?: unknown };
+    if (typeof withMessage.message === "string" && withMessage.message.trim().length > 0) {
+      return withMessage.message;
+    }
+    if (typeof withMessage.payload === "string" && withMessage.payload.trim().length > 0) {
+      return withMessage.payload;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown error";
+    }
+  }
+
+  return "Unknown error";
+}
+
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -144,7 +171,7 @@ export class MqttRuntime {
         await fn();
       }
       this.unlistenFns = [];
-      throw error;
+      throw new Error(extractErrorMessage(error));
     }
   }
 

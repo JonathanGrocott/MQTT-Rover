@@ -6,6 +6,8 @@ export interface TopicRow {
   isLeaf: boolean;
   hasChildren: boolean;
   childCount: number;
+  topicCount: number;
+  messageCount: number;
   expanded: boolean;
 }
 
@@ -25,9 +27,18 @@ export interface ComputeVisibleRequest {
   searchTerm: string;
 }
 
+export interface UpdateTopicCountsRequest {
+  type: "update-topic-counts";
+  updates: Array<{
+    topic: string;
+    deltaMessages: number;
+  }>;
+}
+
 export type TopicWorkerRequest =
   | AddTopicsRequest
   | ResetRequest
+  | UpdateTopicCountsRequest
   | ComputeVisibleRequest;
 
 export interface VisibleRowsResponse {

@@ -60,6 +60,30 @@ const OVERLOAD_PRESETS: Record<OverloadMode, OverloadPreset> = {
   }
 };
 
+function errorMessage(error: unknown): string {
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  if (error && typeof error === "object") {
+    const withMessage = error as { message?: unknown; payload?: unknown };
+    if (typeof withMessage.message === "string" && withMessage.message.trim().length > 0) {
+      return withMessage.message;
+    }
+    if (typeof withMessage.payload === "string" && withMessage.payload.trim().length > 0) {
+      return withMessage.payload;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown error";
+    }
+  }
+  return "Unknown error";
+}
+
 function queueLoad(
   coalescedSize: number,
   historySize: number,
@@ -110,6 +134,18 @@ export default function App() {
   const [focusPanel, setFocusPanel] = useState<"none" | "publish" | "history">(
     "none"
   );
+  const [payloadSplit, setPayloadSplit] = useState(0.66);
+  const [draggingSplit, setDraggingSplit] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1600
+  );
+  const [leftColumnRatio, setLeftColumnRatio] = useState(0.34);
+  const [middleColumnRatio, setMiddleColumnRatio] = useState(0.38);
+  const [draggingColumn, setDraggingColumn] = useState<"none" | "left" | "right">(
+    "none"
+  );
+  const middleColumnRef = useRef<HTMLDivElement | null>(null);
+  const mainGridRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (window.innerHeight < 900) {
@@ -117,6 +153,94 @@ export default function App() {
       setPublishCollapsed(true);
     }
   }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      setViewportWidth(window.innerWidth);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!draggingSplit) {
+      return;
+    }
+
+    const onMove = (event: MouseEvent) => {
+      const node = middleColumnRef.current;
+      if (!node) {
+        return;
+      }
+      const bounds = node.getBoundingClientRect();
+      if (bounds.height <= 0) {
+        return;
+      }
+      const raw = (event.clientY - bounds.top) / bounds.height;
+      const clamped = Math.min(0.84, Math.max(0.38, raw));
+      setPayloadSplit(clamped);
+    };
+
+    const onUp = () => {
+      setDraggingSplit(false);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [draggingSplit]);
+
+  useEffect(() => {
+    if (draggingColumn === "none") {
+      return;
+    }
+
+    const leftMin = 0.2;
+    const middleMin = 0.22;
+    const rightMin = 0.18;
+
+    const onMove = (event: MouseEvent) => {
+      const node = mainGridRef.current;
+      if (!node) {
+        return;
+      }
+      const bounds = node.getBoundingClientRect();
+      if (bounds.width <= 0) {
+        return;
+      }
+      const xRatio = (event.clientX - bounds.left) / bounds.width;
+
+      if (draggingColumn === "left") {
+        let nextLeft = Math.max(leftMin, Math.min(0.62, xRatio));
+        const maxLeft = 1 - middleColumnRatio - rightMin;
+        nextLeft = Math.min(nextLeft, maxLeft);
+        setLeftColumnRatio(nextLeft);
+      } else if (draggingColumn === "right") {
+        let nextMiddle = xRatio - leftColumnRatio;
+        const maxMiddle = 1 - leftColumnRatio - rightMin;
+        nextMiddle = Math.max(middleMin, Math.min(maxMiddle, nextMiddle));
+        setMiddleColumnRatio(nextMiddle);
+      }
+    };
+
+    const onUp = () => {
+      setDraggingColumn("none");
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [draggingColumn, leftColumnRatio, middleColumnRatio]);
 
   const cancelScheduledFlush = () => {
     if (flushHandleRef.current === null) {
@@ -316,7 +440,7 @@ export default function App() {
         }
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
+      const message = errorMessage(error);
       setConnectionState("error", message);
     }
   };
@@ -332,8 +456,25 @@ export default function App() {
     await mqttRuntime.publish(request);
   };
 
+  const middleColumnRows =
+    focusPanel === "publish"
+      ? "1fr"
+      : publishCollapsed
+        ? "1fr auto"
+        : `${payloadSplit}fr 10px ${1 - payloadSplit}fr`;
+
+  const showColumnResizers = focusPanel === "none" && viewportWidth > 1400;
+  const rightColumnRatio = Math.max(0.18, 1 - leftColumnRatio - middleColumnRatio);
+  const mainGridTemplate = showColumnResizers
+    ? `${leftColumnRatio}fr 10px ${middleColumnRatio}fr 10px ${rightColumnRatio}fr`
+    : undefined;
+
   return (
-    <main className="app-shell">
+    <main
+      className={`app-shell ${draggingSplit ? "resizing-y" : ""} ${
+        draggingColumn !== "none" ? "resizing-x" : ""
+      }`}
+    >
       <ConnectionToolbar
         profile={profile}
         collapsed={connectionsCollapsed}
@@ -346,15 +487,36 @@ export default function App() {
       />
 
       <section
+        ref={mainGridRef}
         className={`main-grid ${
           focusPanel !== "none" ? `focus-${focusPanel}` : ""
         } ${publishCollapsed ? "publish-collapsed" : ""} ${
           historyCollapsed ? "history-collapsed" : ""
         }`}
+        style={mainGridTemplate ? { gridTemplateColumns: mainGridTemplate } : undefined}
       >
         <TopicTreePanel selectedTopic={selectedTopic} topics={topics} />
 
-        <div className="column stack middle-column">
+        {showColumnResizers ? (
+          <div
+            className="panel-resize-handle vertical"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize topic explorer and payload columns"
+            onMouseDown={(event) => {
+              event.preventDefault();
+              setDraggingColumn("left");
+            }}
+          >
+            <span />
+          </div>
+        ) : null}
+
+        <div
+          className="column stack middle-column"
+          ref={middleColumnRef}
+          style={{ gridTemplateRows: middleColumnRows }}
+        >
           <PayloadPanel
             topic={selectedTopic}
             snapshot={selectedSnapshot}
@@ -368,6 +530,21 @@ export default function App() {
               await publish({ topic, payload, qos: 1, retain: true });
             }}
           />
+
+          {focusPanel === "none" && !publishCollapsed ? (
+            <div
+              className="panel-resize-handle horizontal"
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize payload and publish panels"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                setDraggingSplit(true);
+              }}
+            >
+              <span />
+            </div>
+          ) : null}
 
           <PublishPanel
             selectedTopic={selectedTopic}
@@ -387,6 +564,21 @@ export default function App() {
             }}
           />
         </div>
+
+        {showColumnResizers ? (
+          <div
+            className="panel-resize-handle vertical"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize payload and history columns"
+            onMouseDown={(event) => {
+              event.preventDefault();
+              setDraggingColumn("right");
+            }}
+          >
+            <span />
+          </div>
+        ) : null}
 
         <HistoryPanel
           topic={selectedTopic}
