@@ -140,6 +140,9 @@ export default function App() {
   const topics = useAppStore((state) => state.topics);
   const historyEnabledTopics = useAppStore((state) => state.historyEnabledTopics);
   const historyByTopic = useAppStore((state) => state.historyByTopic);
+  const messageHistoryByTopic = useAppStore(
+    (state) => state.messageHistoryByTopic
+  );
   const ingestMessages = useAppStore((state) => state.ingestMessages);
   const connectionState = useAppStore((state) => state.connectionState);
   const setConnectionState = useAppStore((state) => state.setConnectionState);
@@ -572,6 +575,9 @@ export default function App() {
   const selectedHistory = selectedTopic
     ? historyByTopic.get(selectedTopic) ?? []
     : [];
+  const selectedMessageHistory = selectedTopic
+    ? messageHistoryByTopic.get(selectedTopic) ?? []
+    : [];
 
   const selectedHistoryEnabled = useMemo(() => {
     if (!selectedTopic) {
@@ -852,6 +858,7 @@ export default function App() {
           <PayloadPanel
             topic={selectedTopic}
             snapshot={selectedSnapshot}
+            messageHistory={selectedMessageHistory}
             historyEnabled={selectedHistoryEnabled}
             onToggleHistory={() => {
               if (selectedTopic) {

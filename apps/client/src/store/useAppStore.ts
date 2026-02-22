@@ -31,6 +31,16 @@ export interface HistoryPoint {
   value: number;
 }
 
+export interface TopicMessageRecord {
+  sequence: number;
+  topic: string;
+  payload: Uint8Array;
+  qos: 0 | 1 | 2;
+  retain: boolean;
+  timestamp: number;
+  mqtt5?: MessageEnvelope["mqtt5"];
+}
+
 export interface TopicCountDelta {
   topic: string;
   deltaMessages: number;
@@ -56,6 +66,8 @@ interface AppState {
   searchTerm: string;
   historyEnabledTopics: Set<string>;
   historyByTopic: Map<string, HistoryPoint[]>;
+  messageHistoryByTopic: Map<string, TopicMessageRecord[]>;
+  messageSequence: number;
   pendingNewTopics: string[];
   pendingTopicCountDeltas: TopicCountDelta[];
   topicStatsRevision: number;
@@ -168,6 +180,7 @@ function createRoot(): TopicTreeNode {
 }
 
 const initialProfile = defaultProfile();
+const MESSAGE_HISTORY_LIMIT = 240;
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -184,6 +197,8 @@ export const useAppStore = create<AppState>()(
       searchTerm: "",
       historyEnabledTopics: new Set<string>(),
       historyByTopic: new Map<string, HistoryPoint[]>(),
+      messageHistoryByTopic: new Map<string, TopicMessageRecord[]>(),
+      messageSequence: 0,
       pendingNewTopics: [],
       pendingTopicCountDeltas: [],
       topicStatsRevision: 0,
@@ -278,9 +293,11 @@ export const useAppStore = create<AppState>()(
 
         const topics = new Map(get().topics);
         const historyByTopic = new Map(get().historyByTopic);
+        const messageHistoryByTopic = new Map(get().messageHistoryByTopic);
         const enabledHistory = get().historyEnabledTopics;
         const newTopics: string[] = [];
         const deltaByTopic = new Map<string, number>();
+        let messageSequence = get().messageSequence;
 
         for (const message of messages) {
           const existingSnapshot = topics.get(message.topic);
@@ -301,6 +318,27 @@ export const useAppStore = create<AppState>()(
             newTopics.push(message.topic);
           }
           deltaByTopic.set(message.topic, (deltaByTopic.get(message.topic) ?? 0) + 1);
+
+          const nextRecord: TopicMessageRecord = {
+            sequence: ++messageSequence,
+            topic: message.topic,
+            payload: new Uint8Array(message.payload),
+            qos: message.qos,
+            retain: message.retain,
+            timestamp: message.timestamp,
+            mqtt5: message.mqtt5
+          };
+          const currentHistory = messageHistoryByTopic.get(message.topic) ?? [];
+          const nextHistory =
+            currentHistory.length >= MESSAGE_HISTORY_LIMIT
+              ? [
+                  ...currentHistory.slice(
+                    currentHistory.length - MESSAGE_HISTORY_LIMIT + 1
+                  ),
+                  nextRecord
+                ]
+              : [...currentHistory, nextRecord];
+          messageHistoryByTopic.set(message.topic, nextHistory);
 
           if (enabledHistory.has(message.topic)) {
             const numeric = tryExtractNumericValue(message.payload);
@@ -325,6 +363,8 @@ export const useAppStore = create<AppState>()(
         set({
           topics,
           historyByTopic,
+          messageHistoryByTopic,
+          messageSequence,
           pendingNewTopics:
             newTopics.length > 0
               ? [...previous.pendingNewTopics, ...newTopics]
@@ -367,6 +407,8 @@ export const useAppStore = create<AppState>()(
           topicStatsRevision: get().topicStatsRevision + 1,
           selectedTopic: null,
           historyByTopic: new Map<string, HistoryPoint[]>(),
+          messageHistoryByTopic: new Map<string, TopicMessageRecord[]>(),
+          messageSequence: 0,
           pendingNewTopics: [],
           pendingTopicCountDeltas: []
         });

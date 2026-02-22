@@ -9,7 +9,34 @@ interface Props {
 }
 
 const ROW_HEIGHT = 26;
-const RECENT_MS = 1400;
+const HIGHLIGHT_MS = 7000;
+const FLASH_MS = 1400;
+
+interface PathHighlight {
+  startedAt: number;
+  expiresAt: number;
+  pendingMessages: number;
+}
+
+function topicToPaths(topic: string): string[] {
+  const segments = topic.split("/");
+  const paths: string[] = [];
+  let cursor = "";
+
+  for (const segment of segments) {
+    const next = cursor ? `${cursor}/${segment}` : segment;
+    cursor = next;
+    if (next.length > 0) {
+      paths.push(next);
+    }
+  }
+
+  return paths;
+}
+
+function formatBurstCount(value: number): string {
+  return value > 99 ? "99+" : String(value);
+}
 
 export function TopicTreePanel({ selectedTopic, topics }: Props) {
   const searchTerm = useAppStore((state) => state.searchTerm);
@@ -22,6 +49,9 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
   const [rows, setRows] = useState<TopicRow[]>([]);
   const [totalRows, setTotalRows] = useState(0);
   const [nowTick, setNowTick] = useState(Date.now());
+  const [pathHighlights, setPathHighlights] = useState<Map<string, PathHighlight>>(
+    () => new Map()
+  );
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
 
@@ -34,6 +64,12 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    if (topics.size === 0) {
+      setPathHighlights(new Map());
+    }
+  }, [topics]);
 
   useEffect(() => {
     const worker = new Worker(
@@ -87,6 +123,24 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
     const pendingTopicDeltas = useAppStore.getState().drainPendingTopicCountDeltas();
     if (pendingTopicDeltas.length > 0) {
       worker.postMessage({ type: "update-topic-counts", updates: pendingTopicDeltas });
+      const now = Date.now();
+      setPathHighlights((previous) => {
+        const next = new Map(previous);
+
+        for (const update of pendingTopicDeltas) {
+          for (const path of topicToPaths(update.topic)) {
+            const existing = next.get(path);
+            const carryExisting = existing && existing.expiresAt > now;
+            next.set(path, {
+              startedAt: carryExisting ? existing.startedAt : now,
+              expiresAt: now + HIGHLIGHT_MS,
+              pendingMessages: (carryExisting ? existing.pendingMessages : 0) + update.deltaMessages
+            });
+          }
+        }
+
+        return next;
+      });
     }
 
     requestIdRef.current += 1;
@@ -119,14 +173,18 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
           const topic = topics.get(item.fullPath);
           const hasChildren = item.hasChildren;
           const isSelected = item.fullPath === selectedTopic;
-          const isRecent = topic ? nowTick - topic.timestamp < RECENT_MS : false;
+          const highlight = pathHighlights.get(item.fullPath);
+          const isRecent = Boolean(highlight && nowTick < highlight.expiresAt);
+          const isFlashing = Boolean(
+            highlight && nowTick - highlight.startedAt >= 0 && nowTick - highlight.startedAt < FLASH_MS
+          );
 
           return (
             <button
               key={item.key}
               className={`topic-row ${
                 isSelected ? "selected" : ""
-              } ${isRecent ? "recent-update" : ""} ${
+              } ${isRecent ? "recent-update" : ""} ${isFlashing ? "flash-update" : ""} ${
                 hasChildren ? "branch-row" : "leaf-row"
               }`}
               style={{ height: `${ROW_HEIGHT}px` }}
@@ -160,6 +218,9 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
               </span>
               {item.isLeaf && topic ? (
                 <span className="topic-msg-count">{topic.messageCount}</span>
+              ) : null}
+              {isRecent && highlight ? (
+                <span className="new-msg-chip">+{formatBurstCount(highlight.pendingMessages)}</span>
               ) : null}
               {topic?.retain ? <span className="retain-chip">R</span> : null}
             </button>
