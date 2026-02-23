@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "npm run dev -w @mqtt-rover/client",
     "build": "npm run build -w @mqtt-rover/client",
-    "typecheck": "npm run typecheck -w @mqtt-rover/client"
+    "typecheck": "npm run typecheck -w @mqtt-rover/client",
+    "test": "npm run test -w @mqtt-rover/client"
   }
 }

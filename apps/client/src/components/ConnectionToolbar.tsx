@@ -1,105 +1,28 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import {
-  ConnectionProfile,
-  Mqtt5UserProperty,
-  OverloadMode,
-  SubscriptionRequest
-} from "@mqtt-rover/protocol";
+import { FormEvent, useMemo, useState } from "react";
+import { ConnectionProfile, OverloadMode, SubscriptionRequest } from "@mqtt-rover/protocol";
+import { resolveInitialSubscriptions, normalizeInitialSubscriptions } from "../lib/subscriptions";
 import { useAppStore } from "../store/useAppStore";
-
-interface ManagedSubscription extends SubscriptionRequest {
-  source: "initial" | "runtime";
-}
+import { ConnectionStatusRow } from "./connection-toolbar/ConnectionStatusRow";
+import { InitialSubscriptionsSection } from "./connection-toolbar/InitialSubscriptionsSection";
+import { Mqtt5ConnectPropertiesSection } from "./connection-toolbar/Mqtt5ConnectPropertiesSection";
+import { MtlsCredentialsSection } from "./connection-toolbar/MtlsCredentialsSection";
+import { ManagedSubscription, RuntimeStats, ViewPreset } from "./connection-toolbar/types";
+import { RuntimeSubscriptionsSection } from "./connection-toolbar/RuntimeSubscriptionsSection";
+import { hasWebSocketPath, toNumber } from "./connection-toolbar/utils";
 
 interface Props {
   profile: ConnectionProfile | null;
-  viewPreset: "simple" | "advanced";
-  onChangeViewPreset: (preset: "simple" | "advanced") => void;
+  viewPreset: ViewPreset;
+  onChangeViewPreset: (preset: ViewPreset) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
-  runtimeStats: {
-    msgPerSec: number;
-    queued: number;
-    coalescedTopics: number;
-    historyBuffered: number;
-    overloadMode: OverloadMode;
-    droppedCoalesced: number;
-    droppedHistory: number;
-    lastBatchSize: number;
-    lastFlushMs: number;
-  };
+  runtimeStats: RuntimeStats;
   onConnect: () => Promise<void>;
   onDisconnect: () => Promise<void>;
   subscriptions: ManagedSubscription[];
   subscriptionsDisabled: boolean;
   onSubscribe: (request: SubscriptionRequest) => Promise<void>;
   onUnsubscribe: (topicFilter: string) => Promise<void>;
-}
-
-function toNumber(value: string, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function toOptionalNumber(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function toErrorMessage(error: unknown): string {
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error;
-  }
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  return "Operation failed";
-}
-
-function parseUserProperties(input: string): Mqtt5UserProperty[] | undefined {
-  const entries = input
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((line) => {
-      const separator = line.indexOf("=");
-      if (separator < 0) {
-        return null;
-      }
-      const key = line.slice(0, separator).trim();
-      const value = line.slice(separator + 1).trim();
-      if (!key) {
-        return null;
-      }
-      return { key, value };
-    })
-    .filter((entry): entry is Mqtt5UserProperty => Boolean(entry));
-
-  return entries.length > 0 ? entries : undefined;
-}
-
-function serializeUserProperties(properties?: Mqtt5UserProperty[]): string {
-  if (!properties || properties.length === 0) {
-    return "";
-  }
-  return properties.map((entry) => `${entry.key}=${entry.value}`).join("\n");
-}
-
-function normalizeInitialSubscriptions(profile: ConnectionProfile | null): SubscriptionRequest[] {
-  const configured =
-    profile?.initialSubscriptions?.filter(
-      (entry) => entry.topicFilter.trim().length > 0
-    ) ?? [];
-  if (configured.length > 0) {
-    return configured;
-  }
-
-  const fallback = profile?.subscriptionFilter?.trim() || "#";
-  return [{ topicFilter: fallback, qos: 0 }];
 }
 
 export function ConnectionToolbar({
@@ -124,17 +47,6 @@ export function ConnectionToolbar({
   const createProfile = useAppStore((state) => state.createProfile);
   const removeActiveProfile = useAppStore((state) => state.removeActiveProfile);
   const updateActiveProfile = useAppStore((state) => state.updateActiveProfile);
-  const [initialFilterDraft, setInitialFilterDraft] = useState("");
-  const [initialQosDraft, setInitialQosDraft] = useState<0 | 1 | 2>(0);
-  const [subscriptionFilter, setSubscriptionFilter] = useState("");
-  const [subscriptionQos, setSubscriptionQos] = useState<0 | 1 | 2>(0);
-  const [subscriptionNoLocal, setSubscriptionNoLocal] = useState(false);
-  const [subscriptionRap, setSubscriptionRap] = useState(false);
-  const [subscriptionRh, setSubscriptionRh] = useState<0 | 1 | 2>(0);
-  const [subscriptionId, setSubscriptionId] = useState("");
-  const [subscriptionUserPropertiesDraft, setSubscriptionUserPropertiesDraft] =
-    useState("");
-  const [connectUserPropertiesDraft, setConnectUserPropertiesDraft] = useState("");
   const [subscriptionBusy, setSubscriptionBusy] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
 
@@ -147,28 +59,13 @@ export function ConnectionToolbar({
   const isMqtt5 = (profile?.mqttProtocolVersion ?? 4) === 5;
   const advancedMode = viewPreset === "advanced";
   const initialSubscriptions = useMemo(
-    () => normalizeInitialSubscriptions(profile),
+    () => resolveInitialSubscriptions(profile),
     [profile]
   );
   const connectProperties = profile?.mqtt5ConnectProperties ?? {};
 
-  useEffect(() => {
-    setConnectUserPropertiesDraft(
-      serializeUserProperties(connectProperties.userProperties)
-    );
-  }, [profile?.id, connectProperties.userProperties]);
-
   const upsertInitialSubscriptions = (next: SubscriptionRequest[]) => {
-    const normalized = next
-      .map((entry) => ({
-        ...entry,
-        topicFilter: entry.topicFilter.trim()
-      }))
-      .filter((entry) => entry.topicFilter.length > 0);
-    const finalList: SubscriptionRequest[] =
-      normalized.length > 0
-        ? normalized
-        : [{ topicFilter: "#", qos: 0 as 0 | 1 | 2 }];
+    const finalList = normalizeInitialSubscriptions(next);
     updateActiveProfile({
       initialSubscriptions: finalList,
       subscriptionFilter: finalList[0]?.topicFilter ?? "#"
@@ -182,9 +79,7 @@ export function ConnectionToolbar({
         <div className="inline">
           <select
             value={viewPreset}
-            onChange={(event) =>
-              onChangeViewPreset(event.target.value as "simple" | "advanced")
-            }
+            onChange={(event) => onChangeViewPreset(event.target.value as ViewPreset)}
           >
             <option value="simple">Simple</option>
             <option value="advanced">Advanced</option>
@@ -316,7 +211,7 @@ export function ConnectionToolbar({
               />
             </div>
 
-            {(profile?.protocol === "ws" || profile?.protocol === "wss") && (
+            {hasWebSocketPath(profile) ? (
               <div className="field-group compact">
                 <label>Path</label>
                 <input
@@ -324,7 +219,7 @@ export function ConnectionToolbar({
                   onChange={(event) => updateActiveProfile({ path: event.target.value })}
                 />
               </div>
-            )}
+            ) : null}
 
             <div className="field-group compact">
               <label>Username</label>
@@ -396,452 +291,47 @@ export function ConnectionToolbar({
             </div>
           </div>
 
-          {advancedMode ? (
-          <details className="toolbar-accordion">
-            <summary>Initial Subscriptions ({initialSubscriptions.length})</summary>
-            <div className="subscription-manager">
-            <div className="subscription-controls">
-              <input
-                value={initialFilterDraft}
-                onChange={(event) => setInitialFilterDraft(event.target.value)}
-                placeholder="topic filter"
-              />
-              <select
-                value={initialQosDraft}
-                onChange={(event) =>
-                  setInitialQosDraft(Number(event.target.value) as 0 | 1 | 2)
-                }
-              >
-                <option value={0}>QoS 0</option>
-                <option value={1}>QoS 1</option>
-                <option value={2}>QoS 2</option>
-              </select>
-              <button
-                type="button"
-                onClick={() => {
-                  const nextFilter = initialFilterDraft.trim();
-                  if (!nextFilter) {
-                    return;
-                  }
-                  upsertInitialSubscriptions([
-                    ...initialSubscriptions.filter(
-                      (entry) => entry.topicFilter !== nextFilter
-                    ),
-                    { topicFilter: nextFilter, qos: initialQosDraft }
-                  ]);
-                  setInitialFilterDraft("");
-                }}
-              >
-                Add
-              </button>
-            </div>
-            <div className="inline">
-              <button
-                type="button"
-                onClick={() =>
-                  upsertInitialSubscriptions([
-                    { topicFilter: "#", qos: 0 },
-                    ...initialSubscriptions.filter((entry) => entry.topicFilter !== "#")
-                  ])
-                }
-              >
-                Add All
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  upsertInitialSubscriptions([
-                    { topicFilter: "spBv1.0/#", qos: 0 },
-                    ...initialSubscriptions.filter(
-                      (entry) => entry.topicFilter !== "spBv1.0/#"
-                    )
-                  ])
-                }
-              >
-                Add Sparkplug
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  upsertInitialSubscriptions([
-                    { topicFilter: "+/+/+", qos: 0 },
-                    ...initialSubscriptions.filter(
-                      (entry) => entry.topicFilter !== "+/+/+"
-                    )
-                  ])
-                }
-              >
-                Add 3-level
-              </button>
-            </div>
-            <div className="subscription-list">
-              {initialSubscriptions.map((entry) => (
-                <div className="subscription-chip" key={`initial-${entry.topicFilter}`}>
-                  <span>{entry.topicFilter}</span>
-                  <select
-                    value={entry.qos}
-                    onChange={(event) =>
-                      upsertInitialSubscriptions(
-                        initialSubscriptions.map((current) =>
-                          current.topicFilter === entry.topicFilter
-                            ? {
-                                ...current,
-                                qos: Number(event.target.value) as 0 | 1 | 2
-                              }
-                            : current
-                        )
-                      )
-                    }
-                  >
-                    <option value={0}>qos0</option>
-                    <option value={1}>qos1</option>
-                    <option value={2}>qos2</option>
-                  </select>
-                  <button
-                    type="button"
-                    className="button-ghost"
-                    onClick={() =>
-                      upsertInitialSubscriptions(
-                        initialSubscriptions.filter(
-                          (current) => current.topicFilter !== entry.topicFilter
-                        )
-                      )
-                    }
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-            </div>
-          </details>
-          ) : null}
+          <InitialSubscriptionsSection
+            advancedMode={advancedMode}
+            subscriptions={initialSubscriptions}
+            onChange={upsertInitialSubscriptions}
+          />
 
-          <details className="toolbar-accordion" open={advancedMode}>
-            <summary>Runtime Subscriptions ({subscriptions.length})</summary>
-            <div className="subscription-manager">
-            <div className="subscription-controls">
-              <input
-                value={subscriptionFilter}
-                onChange={(event) => setSubscriptionFilter(event.target.value)}
-                placeholder="devices/+/status"
-                disabled={subscriptionsDisabled || subscriptionBusy}
-              />
-              <select
-                value={subscriptionQos}
-                onChange={(event) =>
-                  setSubscriptionQos(Number(event.target.value) as 0 | 1 | 2)
-                }
-                disabled={subscriptionsDisabled || subscriptionBusy}
-              >
-                <option value={0}>QoS 0</option>
-                <option value={1}>QoS 1</option>
-                <option value={2}>QoS 2</option>
-              </select>
-              <button
-                type="button"
-                className="button-primary"
-                disabled={
-                  subscriptionsDisabled ||
-                  subscriptionBusy ||
-                  subscriptionFilter.trim().length === 0
-                }
-                onClick={async () => {
-                  setSubscriptionBusy(true);
-                  setSubscriptionError(null);
-                  try {
-                    const request: SubscriptionRequest = {
-                      topicFilter: subscriptionFilter.trim(),
-                      qos: subscriptionQos
-                    };
-                    if (isMqtt5) {
-                      request.mqtt5 = {
-                        noLocal: subscriptionNoLocal,
-                        retainAsPublished: subscriptionRap,
-                        retainHandling: subscriptionRh,
-                        subscriptionIdentifier: toOptionalNumber(subscriptionId),
-                        userProperties: parseUserProperties(
-                          subscriptionUserPropertiesDraft
-                        )
-                      };
-                    }
-                    await onSubscribe(request);
-                    setSubscriptionFilter("");
-                  } catch (error) {
-                    setSubscriptionError(toErrorMessage(error));
-                  } finally {
-                    setSubscriptionBusy(false);
-                  }
-                }}
-              >
-                Subscribe
-              </button>
-            </div>
+          <RuntimeSubscriptionsSection
+            subscriptions={subscriptions}
+            subscriptionsDisabled={subscriptionsDisabled}
+            subscriptionBusy={subscriptionBusy}
+            setSubscriptionBusy={setSubscriptionBusy}
+            subscriptionError={subscriptionError}
+            setSubscriptionError={setSubscriptionError}
+            isMqtt5={isMqtt5}
+            advancedMode={advancedMode}
+            onSubscribe={onSubscribe}
+            onUnsubscribe={onUnsubscribe}
+          />
 
-            {isMqtt5 && advancedMode ? (
-              <details className="toolbar-sub-accordion">
-                <summary>Advanced MQTT5 Subscribe Options</summary>
-                <div className="subscription-advanced">
-                  <label className="retain-toggle">
-                    <input
-                      type="checkbox"
-                      checked={subscriptionNoLocal}
-                      onChange={(event) => setSubscriptionNoLocal(event.target.checked)}
-                      disabled={subscriptionsDisabled || subscriptionBusy}
-                    />
-                    No Local
-                  </label>
-                  <label className="retain-toggle">
-                    <input
-                      type="checkbox"
-                      checked={subscriptionRap}
-                      onChange={(event) => setSubscriptionRap(event.target.checked)}
-                      disabled={subscriptionsDisabled || subscriptionBusy}
-                    />
-                    Retain As Published
-                  </label>
-                  <label>
-                    RH
-                    <select
-                      value={subscriptionRh}
-                      onChange={(event) =>
-                        setSubscriptionRh(Number(event.target.value) as 0 | 1 | 2)
-                      }
-                      disabled={subscriptionsDisabled || subscriptionBusy}
-                    >
-                      <option value={0}>0</option>
-                      <option value={1}>1</option>
-                      <option value={2}>2</option>
-                    </select>
-                  </label>
-                  <label>
-                    Sub Identifier
-                    <input
-                      value={subscriptionId}
-                      onChange={(event) => setSubscriptionId(event.target.value)}
-                      placeholder="optional"
-                      disabled={subscriptionsDisabled || subscriptionBusy}
-                    />
-                  </label>
-                  <label>
-                    User Props (key=value)
-                    <textarea
-                      rows={2}
-                      value={subscriptionUserPropertiesDraft}
-                      onChange={(event) =>
-                        setSubscriptionUserPropertiesDraft(event.target.value)
-                      }
-                      disabled={subscriptionsDisabled || subscriptionBusy}
-                    />
-                  </label>
-                </div>
-              </details>
-            ) : null}
-
-            {subscriptionError ? (
-              <div className="error-text">{subscriptionError}</div>
-            ) : null}
-
-            <div className="subscription-list">
-              {subscriptions.length === 0 ? (
-                <span className="subscription-empty">No active subscriptions</span>
-              ) : (
-                subscriptions.map((entry) => (
-                  <div className="subscription-chip" key={`runtime-${entry.topicFilter}`}>
-                    <span>
-                      {entry.topicFilter} (QoS {entry.qos})
-                    </span>
-                    {entry.mqtt5 ? (
-                      <span className="subscription-source">mqtt5</span>
-                    ) : null}
-                    <span className="subscription-source">{entry.source}</span>
-                    <button
-                      type="button"
-                      className="button-ghost"
-                      disabled={subscriptionsDisabled || subscriptionBusy}
-                      onClick={async () => {
-                        setSubscriptionBusy(true);
-                        setSubscriptionError(null);
-                        try {
-                          await onUnsubscribe(entry.topicFilter);
-                        } catch (error) {
-                          setSubscriptionError(toErrorMessage(error));
-                        } finally {
-                          setSubscriptionBusy(false);
-                        }
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-            </div>
-          </details>
-
-          {isMqtt5 && advancedMode ? (
-            <details className="toolbar-accordion">
-              <summary>MQTT5 Connect Properties</summary>
-              <div className="toolbar-secondary">
-              <div className="field-group">
-                <label>MQTT5 Session Expiry (s)</label>
-                <input
-                  value={connectProperties.sessionExpiryInterval ?? ""}
-                  onChange={(event) =>
-                    updateActiveProfile({
-                      mqtt5ConnectProperties: {
-                        ...connectProperties,
-                        sessionExpiryInterval: toOptionalNumber(event.target.value)
-                      }
-                    })
-                  }
-                />
-              </div>
-              <div className="field-group">
-                <label>MQTT5 Receive Maximum</label>
-                <input
-                  value={connectProperties.receiveMaximum ?? ""}
-                  onChange={(event) =>
-                    updateActiveProfile({
-                      mqtt5ConnectProperties: {
-                        ...connectProperties,
-                        receiveMaximum: toOptionalNumber(event.target.value)
-                      }
-                    })
-                  }
-                />
-              </div>
-              <div className="field-group">
-                <label>MQTT5 Topic Alias Max</label>
-                <input
-                  value={connectProperties.topicAliasMaximum ?? ""}
-                  onChange={(event) =>
-                    updateActiveProfile({
-                      mqtt5ConnectProperties: {
-                        ...connectProperties,
-                        topicAliasMaximum: toOptionalNumber(event.target.value)
-                      }
-                    })
-                  }
-                />
-              </div>
-              <div className="field-group">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(connectProperties.requestResponseInformation)}
-                    onChange={(event) =>
-                      updateActiveProfile({
-                        mqtt5ConnectProperties: {
-                          ...connectProperties,
-                          requestResponseInformation: event.target.checked
-                        }
-                      })
-                    }
-                  />
-                  Request Response Info
-                </label>
-              </div>
-              <div className="field-group">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(connectProperties.requestProblemInformation)}
-                    onChange={(event) =>
-                      updateActiveProfile({
-                        mqtt5ConnectProperties: {
-                          ...connectProperties,
-                          requestProblemInformation: event.target.checked
-                        }
-                      })
-                    }
-                  />
-                  Request Problem Info
-                </label>
-              </div>
-              <div className="field-group">
-                <label>MQTT5 User Props (key=value)</label>
-                <textarea
-                  rows={2}
-                  value={connectUserPropertiesDraft}
-                  onChange={(event) => {
-                    setConnectUserPropertiesDraft(event.target.value);
-                    updateActiveProfile({
-                      mqtt5ConnectProperties: {
-                        ...connectProperties,
-                        userProperties: parseUserProperties(event.target.value)
-                      }
-                    });
-                  }}
-                />
-              </div>
-              </div>
-            </details>
-          ) : null}
+          <Mqtt5ConnectPropertiesSection
+            profileId={profile?.id ?? null}
+            isMqtt5={isMqtt5}
+            advancedMode={advancedMode}
+            connectProperties={connectProperties}
+            onChange={(next) => updateActiveProfile({ mqtt5ConnectProperties: next })}
+          />
         </>
       )}
 
-      {!collapsed && profile?.useMtls && (
-        <details className="toolbar-accordion" open={advancedMode}>
-          <summary>mTLS Credentials</summary>
-          <div className="toolbar-secondary">
-          <div className="field-group">
-            <label>CA PEM (required for desktop mTLS)</label>
-            <textarea
-              rows={2}
-              value={profile.caCertPem ?? ""}
-              onChange={(event) =>
-                updateActiveProfile({ caCertPem: event.target.value })
-              }
-              placeholder="-----BEGIN CERTIFICATE-----"
-            />
-          </div>
-          <div className="field-group">
-            <label>Client Cert PEM</label>
-            <textarea
-              rows={2}
-              value={profile.clientCertPem ?? ""}
-              onChange={(event) =>
-                updateActiveProfile({ clientCertPem: event.target.value })
-              }
-            />
-          </div>
-          <div className="field-group">
-            <label>Client Key PEM</label>
-            <textarea
-              rows={2}
-              value={profile.clientKeyPem ?? ""}
-              onChange={(event) =>
-                updateActiveProfile({ clientKeyPem: event.target.value })
-              }
-            />
-          </div>
-          </div>
-        </details>
-      )}
+      <MtlsCredentialsSection
+        collapsed={collapsed}
+        advancedMode={advancedMode}
+        profile={profile}
+        onUpdateProfile={updateActiveProfile}
+      />
 
-      <div className="status-row">
-        <span className={`pill ${connectionState}`}>{connectionState}</span>
-        {connectionError ? <span className="error-text">{connectionError}</span> : null}
-        <span className="pill telemetry">{runtimeStats.msgPerSec.toFixed(0)} msg/s</span>
-        <span className="pill telemetry">{runtimeStats.overloadMode}</span>
-        <span className="pill telemetry">queued {runtimeStats.queued}</span>
-        <span className="pill telemetry">
-          coalesced {runtimeStats.coalescedTopics}
-        </span>
-        <span className="pill telemetry">
-          history {runtimeStats.historyBuffered}
-        </span>
-        <span className="pill telemetry">
-          flush {runtimeStats.lastBatchSize} / {runtimeStats.lastFlushMs.toFixed(1)}ms
-        </span>
-        {runtimeStats.droppedCoalesced > 0 || runtimeStats.droppedHistory > 0 ? (
-          <span className="pill telemetry dropped">
-            dropped {runtimeStats.droppedCoalesced + runtimeStats.droppedHistory}
-          </span>
-        ) : null}
-      </div>
+      <ConnectionStatusRow
+        connectionState={connectionState}
+        connectionError={connectionError}
+        runtimeStats={runtimeStats}
+      />
     </form>
   );
 }

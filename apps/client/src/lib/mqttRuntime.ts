@@ -9,6 +9,8 @@ import {
   PublishRequest,
   SubscriptionRequest
 } from "@mqtt-rover/protocol";
+import { errorMessage } from "./errors";
+import { resolveInitialSubscriptions } from "./subscriptions";
 
 interface RuntimeHandlers {
   onMessage: (message: MessageEnvelope) => void;
@@ -25,33 +27,6 @@ interface TauriIncomingMessage {
   mqtt5?: MessageEnvelope["mqtt5"];
 }
 
-function extractErrorMessage(error: unknown): string {
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error;
-  }
-
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-
-  if (error && typeof error === "object") {
-    const withMessage = error as { message?: unknown; payload?: unknown };
-    if (typeof withMessage.message === "string" && withMessage.message.trim().length > 0) {
-      return withMessage.message;
-    }
-    if (typeof withMessage.payload === "string" && withMessage.payload.trim().length > 0) {
-      return withMessage.payload;
-    }
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return "Unknown error";
-    }
-  }
-
-  return "Unknown error";
-}
-
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -63,19 +38,6 @@ function shouldUseTcpTauri(profile: ConnectionProfile): boolean {
 function toUrl(profile: ConnectionProfile): string {
   const path = profile.path ?? "/mqtt";
   return `${profile.protocol}://${profile.host}:${profile.port}${path}`;
-}
-
-function resolveInitialSubscriptions(profile: ConnectionProfile): SubscriptionRequest[] {
-  const configured =
-    profile.initialSubscriptions?.filter(
-      (entry) => entry.topicFilter.trim().length > 0
-    ) ?? [];
-
-  if (configured.length > 0) {
-    return configured;
-  }
-
-  return [{ topicFilter: profile.subscriptionFilter?.trim() || "#", qos: 0 }];
 }
 
 function mqtt5UserPropertiesToMqttJs(
@@ -339,7 +301,7 @@ export class MqttRuntime {
         await fn();
       }
       this.unlistenFns = [];
-      throw new Error(extractErrorMessage(error));
+      throw new Error(errorMessage(error));
     }
   }
 

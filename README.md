@@ -45,6 +45,13 @@ npm run dev
 npm run build
 ```
 
+## Validate
+```bash
+npm run typecheck
+npm run test
+npm run build
+```
+
 ## Run (Desktop)
 ```bash
 . "$HOME/.cargo/env"
@@ -63,6 +70,7 @@ Notes:
 - Rust toolchain is required for desktop (`rustc`/`cargo`). Install with `rustup` and source `$HOME/.cargo/env`.
 - Desktop backend compiles successfully with `cargo check` in `apps/client/src-tauri`.
 - Web mode (`ws` / `wss`) remains fully working and validated.
+- CI runs web checks (`typecheck`, `test`, `build`) and a macOS desktop `cargo check`.
 
 ## Next Milestones
 1. Add advanced overload options (custom per-profile caps and optional auto-subscription narrowing).
