@@ -10,6 +10,10 @@
     "dev": "npm run dev -w @mqtt-rover/client",
     "build": "npm run build -w @mqtt-rover/client",
     "typecheck": "npm run typecheck -w @mqtt-rover/client",
-    "test": "npm run test -w @mqtt-rover/client"
+    "test": "npm run test -w @mqtt-rover/client",
+    "electron:dev": "npm run electron:dev -w @mqtt-rover/client",
+    "electron:build": "npm run electron:build -w @mqtt-rover/client",
+    "electron:package": "npm run electron:package -w @mqtt-rover/client",
+    "electron:make": "npm run electron:make -w @mqtt-rover/client"
   }
 }

@@ -26,11 +26,11 @@ Current milestone implements:
 - React + TypeScript + Vite
 - Zustand for state
 - MQTT.js transport for web (`ws`/`wss`)
-- Tauri desktop transport (`rumqttc`) for raw `mqtt`/`mqtts`
+- Electron desktop shell with main-process MQTT.js transport (`mqtt`/`mqtts`/`ws`/`wss`)
 - Shared workspace packages for protocol and Sparkplug decode
 
 ## Workspace Layout
-- `apps/client`: React web app + Tauri shell files
+- `apps/client`: React web app + Electron desktop shell
 - `packages/protocol`: Shared protocol types/utilities
 - `packages/sparkplug`: Sparkplug B protobuf decoder
 
@@ -54,23 +54,34 @@ npm run build
 
 ## Run (Desktop)
 ```bash
-. "$HOME/.cargo/env"
-cd apps/client
-npm run tauri:dev
+npm run electron:dev
 ```
 
 ## Desktop Status
-Desktop transport implementation lives under `apps/client/src-tauri`:
-- `mqtt` and `mqtts` supported through Rust (`rumqttc`)
-- Username/password supported
-- mTLS supported for `mqtts` when CA + client cert + client key PEM values are provided
-- MQTT5 connection, publish, subscribe, and incoming publish-property metadata supported
+Desktop implementation lives under `apps/client/electron`:
+- Broker sockets run in Electron's main process; the renderer has no Node.js access
+- `mqtt`, `mqtts`, `ws`, and `wss` are supported through MQTT.js
+- Username/password and mTLS are supported
+- MQTT 5 connection, publish, subscribe, and incoming publish-property metadata are supported
+- Incoming messages cross the isolated preload bridge in frame-sized batches
+- Password and TLS PEM values are encrypted with Electron `safeStorage`
 
 Notes:
-- Rust toolchain is required for desktop (`rustc`/`cargo`). Install with `rustup` and source `$HOME/.cargo/env`.
-- Desktop backend compiles successfully with `cargo check` in `apps/client/src-tauri`.
 - Web mode (`ws` / `wss`) remains fully working and validated.
-- CI runs web checks (`typecheck`, `test`, `build`) and a macOS desktop `cargo check`.
+- Electron requires its platform binary to be available through npm's download path, an internal
+  `ELECTRON_MIRROR`, or a pre-populated cache.
+- CI runs web checks plus packaged Electron builds on macOS and Windows.
+- The previous Tauri source remains temporarily under `apps/client/src-tauri` for migration comparison
+  and will be removed after packaged-app connection parity is verified.
+
+## Package (Desktop)
+```bash
+# Unpacked application for the current OS
+npm run electron:package
+
+# Installer/archive for the current OS
+npm run electron:make
+```
 
 ## Next Milestones
 1. Add advanced overload options (custom per-profile caps and optional auto-subscription narrowing).

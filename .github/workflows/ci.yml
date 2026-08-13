@@ -18,12 +18,16 @@ jobs:
       - run: npm run test
       - run: npm run build
 
-  desktop-tauri-check:
-    runs-on: macos-latest
+  desktop-electron-check:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
         with:
-          workspaces: apps/client/src-tauri
-      - run: cargo check --manifest-path apps/client/src-tauri/Cargo.toml
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run electron:package

@@ -152,6 +152,18 @@ function normalizeProfile(profile: ConnectionProfile): ConnectionProfile {
   };
 }
 
+function profileWithoutPersistedSecrets(
+  profile: ConnectionProfile
+): ConnectionProfile {
+  return {
+    ...normalizeProfile(profile),
+    password: undefined,
+    caCertPem: undefined,
+    clientCertPem: undefined,
+    clientKeyPem: undefined
+  };
+}
+
 const previewDecoder = new TextDecoder();
 
 function payloadPreview(bytes: Uint8Array): string {
@@ -428,7 +440,7 @@ export const useAppStore = create<AppState>()(
     {
       name: "mqtt-rover-store",
       partialize: (state): PersistedSlice => ({
-        profiles: state.profiles.map(normalizeProfile),
+        profiles: state.profiles.map(profileWithoutPersistedSecrets),
         activeProfileId: state.activeProfileId,
         expandedPaths: Array.from(state.expandedPaths),
         historyEnabledTopics: Array.from(state.historyEnabledTopics)
