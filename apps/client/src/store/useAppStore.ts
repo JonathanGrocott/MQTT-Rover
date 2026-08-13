@@ -8,6 +8,7 @@ import {
   tryExtractNumericValue
 } from "@mqtt-rover/protocol";
 import { getElectronBridge } from "../desktop/electronBridge";
+import { TopicActivityMode } from "../lib/topicActivity";
 
 export interface TopicTreeNode {
   name: string;
@@ -52,6 +53,7 @@ interface PersistedSlice {
   activeProfileId: string | null;
   expandedPaths: string[];
   historyEnabledTopics: string[];
+  topicActivityMode?: TopicActivityMode;
 }
 
 interface AppState {
@@ -72,6 +74,7 @@ interface AppState {
   pendingNewTopics: string[];
   pendingTopicCountDeltas: TopicCountDelta[];
   topicStatsRevision: number;
+  topicActivityMode: TopicActivityMode;
   setConnectionState: (state: ConnectionState, error?: string | null) => void;
   setSearchTerm: (value: string) => void;
   setSelectedTopic: (topic: string | null) => void;
@@ -87,6 +90,7 @@ interface AppState {
   drainPendingTopicCountDeltas: () => TopicCountDelta[];
   clearRuntimeData: () => void;
   toggleHistoryForTopic: (topic: string) => void;
+  setTopicActivityMode: (mode: TopicActivityMode) => void;
 }
 
 const defaultProfile = (): ConnectionProfile => ({
@@ -216,6 +220,7 @@ export const useAppStore = create<AppState>()(
       pendingNewTopics: [],
       pendingTopicCountDeltas: [],
       topicStatsRevision: 0,
+      topicActivityMode: "subtle",
 
       setConnectionState: (state, error = null) => {
         set({ connectionState: state, connectionError: error });
@@ -453,6 +458,10 @@ export const useAppStore = create<AppState>()(
         }
 
         set({ historyEnabledTopics: enabled });
+      },
+
+      setTopicActivityMode: (mode) => {
+        set({ topicActivityMode: mode });
       }
     }),
     {
@@ -461,7 +470,8 @@ export const useAppStore = create<AppState>()(
         profiles: state.profiles.map(profileWithoutPersistedSecrets),
         activeProfileId: state.activeProfileId,
         expandedPaths: Array.from(state.expandedPaths),
-        historyEnabledTopics: Array.from(state.historyEnabledTopics)
+        historyEnabledTopics: Array.from(state.historyEnabledTopics),
+        topicActivityMode: state.topicActivityMode
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as PersistedSlice;
@@ -471,7 +481,12 @@ export const useAppStore = create<AppState>()(
           ...persisted,
           profiles: persistedProfiles.length > 0 ? persistedProfiles : currentState.profiles,
           expandedPaths: new Set(persisted.expandedPaths ?? []),
-          historyEnabledTopics: new Set(persisted.historyEnabledTopics ?? [])
+          historyEnabledTopics: new Set(persisted.historyEnabledTopics ?? []),
+          topicActivityMode:
+            persisted.topicActivityMode === "off" ||
+            persisted.topicActivityMode === "full"
+              ? persisted.topicActivityMode
+              : "subtle"
         } satisfies AppState;
       }
     }

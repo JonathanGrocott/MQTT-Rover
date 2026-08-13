@@ -19,7 +19,7 @@ Current milestone implements:
 - Opt-in per-topic history capture with charting
 - Runtime backpressure telemetry chips (msg/s, queue depth, coalescing, flush cost, drops)
 - Adaptive overload controls with hard queue caps by mode (`balanced`, `history-priority`, `latest-only`)
-- Tree UX upgrades: inline endpoint payload previews, per-topic message counters, and recent-message highlight
+- Tree UX upgrades: inline endpoint payload previews, per-topic message counters, and scalable Off/Subtle/Full activity indications
 - Workspace usability controls: collapsible connections/publish/history panels and focus mode for publish/history
 
 ## Stack

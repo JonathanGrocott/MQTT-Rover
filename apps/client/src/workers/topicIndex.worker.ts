@@ -5,6 +5,12 @@ import {
   TopicWorkerRequest,
   TopicWorkerResponse
 } from "../types/topicRows";
+import {
+  ActivitySignal,
+  EMPTY_ACTIVITY_SIGNAL,
+  recordActivitySignal,
+  TopicActivityMode
+} from "../lib/topicActivity";
 
 interface TopicNode {
   name: string;
@@ -13,6 +19,12 @@ interface TopicNode {
   isLeaf: boolean;
   topicCount: number;
   messageCount: number;
+  directActivity: ActivitySignal;
+  descendantActivity: ActivitySignal;
+}
+
+function emptyActivity(): ActivitySignal {
+  return { ...EMPTY_ACTIVITY_SIGNAL };
 }
 
 const root: TopicNode = {
@@ -21,7 +33,9 @@ const root: TopicNode = {
   children: new Map<string, TopicNode>(),
   isLeaf: false,
   topicCount: 0,
-  messageCount: 0
+  messageCount: 0,
+  directActivity: emptyActivity(),
+  descendantActivity: emptyActivity()
 };
 
 const knownLeafTopics = new Set<string>();
@@ -30,6 +44,8 @@ function resetTree(): void {
   root.children.clear();
   root.topicCount = 0;
   root.messageCount = 0;
+  root.directActivity = emptyActivity();
+  root.descendantActivity = emptyActivity();
   knownLeafTopics.clear();
 }
 
@@ -55,7 +71,9 @@ function insertTopic(topic: string): void {
         children: new Map<string, TopicNode>(),
         isLeaf: false,
         topicCount: 0,
-        messageCount: 0
+        messageCount: 0,
+        directActivity: emptyActivity(),
+        descendantActivity: emptyActivity()
       };
       cursor.children.set(name, child);
     }
@@ -73,7 +91,12 @@ function insertTopic(topic: string): void {
   }
 }
 
-function incrementTopicMessageCount(topic: string, deltaMessages: number): void {
+function incrementTopicMessageCount(
+  topic: string,
+  deltaMessages: number,
+  now: number,
+  activityMode: TopicActivityMode
+): void {
   if (deltaMessages <= 0) {
     return;
   }
@@ -89,6 +112,21 @@ function incrementTopicMessageCount(topic: string, deltaMessages: number): void 
       return;
     }
     next.messageCount += deltaMessages;
+    if (index === segments.length - 1) {
+      recordActivitySignal(
+        next.directActivity,
+        deltaMessages,
+        now,
+        activityMode
+      );
+    } else {
+      recordActivitySignal(
+        next.descendantActivity,
+        deltaMessages,
+        now,
+        activityMode
+      );
+    }
     cursor = next;
   }
 }
@@ -117,7 +155,13 @@ function walkVisible(
       childCount: child.children.size,
       topicCount: child.topicCount,
       messageCount: child.messageCount,
-      expanded: isExpanded
+      expanded: isExpanded,
+      directActivityAt: child.directActivity.lastActivityAt,
+      directPulseAt: child.directActivity.lastPulseAt,
+      directBurstCount: child.directActivity.burstCount,
+      descendantActivityAt: child.descendantActivity.lastActivityAt,
+      descendantPulseAt: child.descendantActivity.lastPulseAt,
+      descendantBurstCount: child.descendantActivity.burstCount
     });
 
     if (hasChildren && isExpanded) {
@@ -139,7 +183,13 @@ function walkLeaves(node: TopicNode, filter: string, rows: TopicRow[]): void {
         childCount: 0,
         topicCount: 1,
         messageCount: child.messageCount,
-        expanded: false
+        expanded: false,
+        directActivityAt: child.directActivity.lastActivityAt,
+        directPulseAt: child.directActivity.lastPulseAt,
+        directBurstCount: child.directActivity.burstCount,
+        descendantActivityAt: child.descendantActivity.lastActivityAt,
+        descendantPulseAt: child.descendantActivity.lastPulseAt,
+        descendantBurstCount: child.descendantActivity.burstCount
       });
     }
 
@@ -178,8 +228,14 @@ self.onmessage = (event: MessageEvent<TopicWorkerRequest>) => {
       break;
     }
     case "update-topic-counts": {
+      const now = Date.now();
       for (const update of message.updates) {
-        incrementTopicMessageCount(update.topic, update.deltaMessages);
+        incrementTopicMessageCount(
+          update.topic,
+          update.deltaMessages,
+          now,
+          message.activityMode
+        );
       }
       break;
     }
