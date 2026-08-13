@@ -216,7 +216,6 @@ export class MqttSessionManager {
       if (generation !== this.generation) {
         return;
       }
-      this.events.onStatus("error");
       this.events.onError(error.message);
     });
 

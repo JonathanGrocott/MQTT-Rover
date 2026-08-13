@@ -132,4 +132,24 @@ describe("MqttSessionManager", () => {
       })
     ]);
   });
+
+  it("reports connection failures without oscillating the status", async () => {
+    const onStatus = vi.fn();
+    const onError = vi.fn();
+    const manager = new MqttSessionManager({
+      onMessages: vi.fn(),
+      onStatus,
+      onError
+    });
+    await manager.connect(profile);
+
+    client.emit("error", new Error("connection refused"));
+    client.emit("close");
+
+    expect(onError).toHaveBeenCalledWith("connection refused");
+    expect(onStatus.mock.calls.map(([status]) => status)).toEqual([
+      "connecting",
+      "disconnected"
+    ]);
+  });
 });

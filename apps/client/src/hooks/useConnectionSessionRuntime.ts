@@ -72,7 +72,11 @@ export function useConnectionSessionRuntime({
           enqueueMessage(message);
         },
         onState: (state) => {
-          setConnectionState(state);
+          const current = useAppStore.getState();
+          setConnectionState(
+            state,
+            state === "disconnected" ? current.connectionError : null
+          );
           if (state === "connected") {
             setSubscriptions(
               connectProfile.initialSubscriptions.map((entry) => ({
@@ -85,7 +89,11 @@ export function useConnectionSessionRuntime({
           }
         },
         onError: (message) => {
-          setConnectionState("error", message);
+          const currentState = useAppStore.getState().connectionState;
+          setConnectionState(
+            currentState === "connected" ? "error" : "disconnected",
+            message
+          );
         }
       });
       if (getElectronBridge()) {

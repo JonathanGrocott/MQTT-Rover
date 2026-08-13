@@ -130,7 +130,6 @@ export class MqttRuntime {
       }),
       bridge.onStatus(handlers.onState),
       bridge.onError((message) => {
-        handlers.onState("error");
         handlers.onError(message);
       })
     ];
@@ -266,7 +265,6 @@ export class MqttRuntime {
     });
 
     client.on("error", (error) => {
-      handlers.onState("error");
       handlers.onError(error.message);
     });
 
