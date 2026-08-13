@@ -72,11 +72,33 @@ export function useWorkspaceLayout(): WorkspaceLayoutState {
   const [viewportWidth, setViewportWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1600
   );
-  const [leftColumnRatio, setLeftColumnRatio] = useState(0.4);
-  const [middleColumnRatio, setMiddleColumnRatio] = useState(0.42);
+  const [leftColumnRatio, setLeftColumnRatio] = useState(() => {
+    if (typeof window === "undefined") return 0.46;
+    const saved = Number(window.localStorage.getItem("mqtt-rover.layout.left-ratio"));
+    return Number.isFinite(saved) && saved >= 0.3 && saved <= 0.7 ? saved : 0.46;
+  });
+  const [middleColumnRatio, setMiddleColumnRatio] = useState(() => {
+    if (typeof window === "undefined") return 0.36;
+    const saved = Number(window.localStorage.getItem("mqtt-rover.layout.middle-ratio"));
+    return Number.isFinite(saved) && saved >= 0.22 && saved <= 0.55 ? saved : 0.36;
+  });
   const [draggingColumn, setDraggingColumn] = useState<DraggingColumn>("none");
   const middleColumnRef = useRef<HTMLDivElement | null>(null);
   const mainGridRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("mqtt-rover.layout.left-ratio", String(leftColumnRatio));
+  }, [leftColumnRatio]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("mqtt-rover.layout.middle-ratio", String(middleColumnRatio));
+  }, [middleColumnRatio]);
 
   useEffect(() => {
     const onResize = () => {
@@ -178,7 +200,7 @@ export function useWorkspaceLayout(): WorkspaceLayoutState {
       return;
     }
 
-    const leftMin = 0.2;
+    const leftMin = 0.3;
     const middleMin = 0.22;
     const rightMin = 0.18;
 
@@ -231,7 +253,7 @@ export function useWorkspaceLayout(): WorkspaceLayoutState {
         ? "1fr"
         : `${payloadSplit}fr 10px ${1 - payloadSplit}fr`;
 
-  const showLeftResizer = focusPanel === "none" && viewportWidth > 1400;
+  const showLeftResizer = focusPanel === "none" && viewportWidth > 980;
   const showRightResizer = showLeftResizer && !historyCollapsed;
   const rightColumnRatio = Math.max(0.18, 1 - leftColumnRatio - middleColumnRatio);
   const mainGridTemplate = showLeftResizer

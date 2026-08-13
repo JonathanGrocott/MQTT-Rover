@@ -17,7 +17,6 @@ function formatBurstCount(value: number): string {
 
 export function TopicTreePanel({ selectedTopic, topics }: Props) {
   const searchTerm = useAppStore((state) => state.searchTerm);
-  const setSearchTerm = useAppStore((state) => state.setSearchTerm);
   const expandedPaths = useAppStore((state) => state.expandedPaths);
   const toggleExpanded = useAppStore((state) => state.toggleExpanded);
   const setSelectedTopic = useAppStore((state) => state.setSelectedTopic);
@@ -28,8 +27,16 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
   const [rows, setRows] = useState<TopicRow[]>([]);
   const [totalRows, setTotalRows] = useState(0);
   const [nowTick, setNowTick] = useState(Date.now());
+  const [showValues, setShowValues] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("mqtt-rover.tree.show-values") !== "0";
+  });
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
+
+  useEffect(() => {
+    window.localStorage.setItem("mqtt-rover.tree.show-values", showValues ? "1" : "0");
+  }, [showValues]);
 
   useEffect(() => {
     if (activityMode === "off") {
@@ -139,11 +146,17 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
               <option value="full">Full</option>
             </select>
           </label>
-          <input
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Filter topics"
-          />
+          <label className="activity-mode-control">
+            <span>Values</span>
+            <select
+              value={showValues ? "show" : "hide"}
+              onChange={(event) => setShowValues(event.target.value === "show")}
+              aria-label="Inline topic values"
+            >
+              <option value="show">Show</option>
+              <option value="hide">Hide</option>
+            </select>
+          </label>
         </div>
       </header>
       <div className="topic-tree-list" ref={containerRef}>
@@ -206,7 +219,7 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
               <span className="twisty">{hasChildren ? (item.expanded ? "▾" : "▸") : "•"}</span>
               <span className="topic-main">
                 <span className="topic-name">{item.label}</span>
-                {item.isLeaf && topic ? (
+                {showValues && item.isLeaf && topic ? (
                   <span className="topic-preview">= {topic.preview}</span>
                 ) : null}
                 {hasChildren ? (

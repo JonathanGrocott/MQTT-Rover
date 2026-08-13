@@ -6,6 +6,7 @@ import { PayloadPanel } from "./components/PayloadPanel";
 import { PublishPanel } from "./components/PublishPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { TimelinePanel } from "./components/TimelinePanel";
+import { WorkspaceHeader } from "./components/WorkspaceHeader";
 import { useConnectionSessionRuntime } from "./hooks/useConnectionSessionRuntime";
 import { useMessageIngestionRuntime, OverloadPreset } from "./hooks/useMessageIngestionRuntime";
 import { useTimelineRuntime } from "./hooks/useTimelineRuntime";
@@ -138,36 +139,23 @@ export default function App() {
 
   return (
     <main
-      className={`app-shell ${draggingSplit ? "resizing-y" : ""} ${
+      className={`app-shell ${connectionsCollapsed ? "connections-collapsed" : ""} ${draggingSplit ? "resizing-y" : ""} ${
         draggingColumn !== "none" ? "resizing-x" : ""
       }`}
     >
-      <div className="workspace-strip">
-        <button
-          type="button"
-          className={connectionsCollapsed ? "button-ghost" : "button-primary"}
-          onClick={() => setConnectionsCollapsed((current) => !current)}
-        >
-          {connectionsCollapsed ? "Show Connections" : "Hide Connections"}
-        </button>
-        <button
-          type="button"
-          className={publishCollapsed ? "button-ghost" : "button-primary"}
-          onClick={() => setPublishCollapsed((current) => !current)}
-        >
-          {publishCollapsed ? "Show Publish" : "Hide Publish"}
-        </button>
-        <button
-          type="button"
-          className={historyCollapsed ? "button-ghost" : "button-primary"}
-          onClick={() => setHistoryCollapsed((current) => !current)}
-        >
-          {historyCollapsed ? "Show History/Timeline" : "Hide History/Timeline"}
-        </button>
-        <span className="workspace-strip-note">
-          Prioritize Topic Explorer + Payload Viewer
-        </span>
-      </div>
+      <WorkspaceHeader
+        profileName={profile?.name ?? "No profile"}
+        connectionState={connectionState}
+        runtimeStats={runtimeStats}
+        connectionsOpen={!connectionsCollapsed}
+        publishOpen={!publishCollapsed}
+        historyOpen={!historyCollapsed}
+        onToggleConnections={() => setConnectionsCollapsed((current) => !current)}
+        onTogglePublish={() => setPublishCollapsed((current) => !current)}
+        onToggleHistory={() => setHistoryCollapsed((current) => !current)}
+        onConnect={connect}
+        onDisconnect={disconnect}
+      />
 
       {!connectionsCollapsed ? (
         <ConnectionToolbar

@@ -101,6 +101,7 @@ export function PayloadPanel({
   const [activeView, setActiveView] = useState<PayloadView>("json");
   const [compareMode, setCompareMode] = useState<CompareMode>("raw");
   const [compareSequence, setCompareSequence] = useState<number | null>(null);
+  const [topicCopied, setTopicCopied] = useState(false);
 
   useEffect(() => {
     if (!snapshot) {
@@ -140,7 +141,7 @@ export function PayloadPanel({
     return (
       <section className="panel payload-panel">
         <header className="panel-header">
-          <h2>Payload Viewer</h2>
+          <h2>Topic Inspector</h2>
         </header>
         <div className="empty-state">Select a topic to inspect payload and history.</div>
       </section>
@@ -185,11 +186,12 @@ export function PayloadPanel({
         ? diffPayloads(compareViewContent, currentViewContent)
         : "At least two messages are required to compute a diff."
       : currentViewContent;
+  const topicSegments = topic.split("/");
 
   return (
     <section className="panel payload-panel">
       <header className="panel-header">
-        <h2>Payload Viewer</h2>
+        <h2>Topic Inspector</h2>
         <div className="inline">
           <button type="button" className="button-ghost" onClick={onToggleHistory}>
             {historyEnabled ? "Stop History" : "Start History"}
@@ -197,97 +199,92 @@ export function PayloadPanel({
         </div>
       </header>
 
-      <div className="payload-meta">
-        <span>
-          <strong>Topic:</strong> {topic}
-        </span>
-        <span>
-          <strong>QoS:</strong> {snapshot.qos}
-        </span>
-        <span>
-          <strong>Retain:</strong> {snapshot.retain ? "Yes" : "No"}
-        </span>
-        <span>
-          <strong>Timestamp:</strong> {new Date(snapshot.timestamp).toLocaleTimeString()}
-        </span>
-      </div>
-
-      <div className="payload-view-switcher">
-        <button
-          type="button"
-          className={activeView === "json" ? "button-primary" : "button-ghost"}
-          onClick={() => setActiveView("json")}
-        >
-          JSON
-        </button>
-        <button
-          type="button"
-          className={activeView === "utf8" ? "button-primary" : "button-ghost"}
-          onClick={() => setActiveView("utf8")}
-        >
-          UTF-8
-        </button>
-        <button
-          type="button"
-          className={activeView === "hex" ? "button-primary" : "button-ghost"}
-          onClick={() => setActiveView("hex")}
-        >
-          HEX
-        </button>
-        <button
-          type="button"
-          className={activeView === "sparkplug" ? "button-primary" : "button-ghost"}
-          onClick={() => setActiveView("sparkplug")}
-        >
-          Sparkplug
-        </button>
-        <button
-          type="button"
-          className={activeView === "mqtt5" ? "button-primary" : "button-ghost"}
-          onClick={() => setActiveView("mqtt5")}
-        >
-          MQTT5
-        </button>
-      </div>
-
-      <div className="payload-compare-controls">
-        <span className="payload-compare-label">Compare</span>
-        <button
-          type="button"
-          className={compareMode === "raw" ? "button-primary" : "button-ghost"}
-          onClick={() => setCompareMode("raw")}
-        >
-          Raw
-        </button>
-        <button
-          type="button"
-          className={compareMode === "diff" ? "button-primary" : "button-ghost"}
-          onClick={() => setCompareMode("diff")}
-        >
-          Diff
-        </button>
-        <select
-          value={compareSequence ?? ""}
-          onChange={(event) =>
-            setCompareSequence(
-              event.target.value ? Number(event.target.value) : null
-            )
-          }
-          disabled={compareOptions.length === 0}
-        >
-          <option value="">Previous message</option>
-          {compareOptions.map((entry) => (
-            <option key={entry.sequence} value={entry.sequence}>
-              {new Date(entry.timestamp).toLocaleTimeString()} qos{entry.qos}
-              {entry.retain ? " retain" : ""}
-            </option>
+      <div className="topic-summary">
+        <div className="topic-breadcrumb" aria-label={`Selected topic: ${topic}`}>
+          {topicSegments.map((segment, index) => (
+            <span className="topic-breadcrumb-part" key={`${segment}-${index}`}>
+              {index > 0 ? <span className="topic-breadcrumb-separator">/</span> : null}
+              <span className="topic-breadcrumb-chip">{segment || "(empty)"}</span>
+            </span>
           ))}
-        </select>
+        </div>
+        <div className="payload-meta">
+          <span>QoS {snapshot.qos}</span>
+          <span>{snapshot.retain ? "Retained" : "Live"}</span>
+          <span>{new Date(snapshot.timestamp).toLocaleTimeString()}</span>
+          <button
+            type="button"
+            className="topic-copy-button"
+            onClick={async () => {
+              await navigator.clipboard.writeText(topic);
+              setTopicCopied(true);
+              window.setTimeout(() => setTopicCopied(false), 1_500);
+            }}
+          >
+            {topicCopied ? "Copied" : "Copy topic"}
+          </button>
+        </div>
       </div>
 
-      <div className="payload-viewer">
-        <pre>{viewerContent}</pre>
-      </div>
+      <section className="inspector-section current-value-section">
+        <header className="inspector-section-header">
+          <h3>Current value</h3>
+          <div className="payload-view-switcher">
+            {(["json", "utf8", "hex", "sparkplug", "mqtt5"] as PayloadView[]).map(
+              (view) => (
+                <button
+                  type="button"
+                  key={view}
+                  className={activeView === view ? "button-primary" : "button-ghost"}
+                  onClick={() => setActiveView(view)}
+                >
+                  {view === "utf8" ? "UTF-8" : view === "mqtt5" ? "MQTT5" : view[0].toUpperCase() + view.slice(1)}
+                </button>
+              )
+            )}
+          </div>
+        </header>
+
+        <div className="payload-compare-controls">
+          <span className="payload-compare-label">Compare</span>
+          <button
+            type="button"
+            className={compareMode === "raw" ? "button-primary" : "button-ghost"}
+            onClick={() => setCompareMode("raw")}
+          >
+            Raw
+          </button>
+          <button
+            type="button"
+            className={compareMode === "diff" ? "button-primary" : "button-ghost"}
+            onClick={() => setCompareMode("diff")}
+          >
+            Diff
+          </button>
+          <select
+            aria-label="Message to compare"
+            value={compareSequence ?? ""}
+            onChange={(event) =>
+              setCompareSequence(
+                event.target.value ? Number(event.target.value) : null
+              )
+            }
+            disabled={compareOptions.length === 0}
+          >
+            <option value="">Previous message</option>
+            {compareOptions.map((entry) => (
+              <option key={entry.sequence} value={entry.sequence}>
+                {new Date(entry.timestamp).toLocaleTimeString()} qos{entry.qos}
+                {entry.retain ? " retain" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="payload-viewer">
+          <pre>{viewerContent}</pre>
+        </div>
+      </section>
 
       <details className="payload-history">
         <summary>Message History ({messageHistory.length})</summary>
