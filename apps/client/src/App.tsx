@@ -212,6 +212,11 @@ export default function App() {
             historyEnabled={selectedHistoryEnabled}
             onToggleHistory={() => {
               if (selectedTopic) {
+                if (!selectedHistoryEnabled) {
+                  setHistoryCollapsed(false);
+                  setRightPanelView("history");
+                  setFocusPanel("none");
+                }
                 toggleHistoryForTopic(selectedTopic);
               }
             }}
