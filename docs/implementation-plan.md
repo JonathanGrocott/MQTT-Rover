@@ -35,6 +35,7 @@
 - [x] OS-encrypted desktop credential storage
 - [x] Connection-time subscription filter controls + wildcard presets
 - [x] Topic tree usability pass: inline payload previews + recent-message highlight
+- [x] Scale-aware topic activity modes with throttled pulses and reduced-motion support
 - [x] Workspace usability pass: collapsible and focusable publish/history panels
 
 ### M2
