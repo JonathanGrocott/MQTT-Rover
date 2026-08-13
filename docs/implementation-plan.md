@@ -2,9 +2,9 @@
 
 ## Product Decisions
 - License: MIT
-- Desktop tech: Tauri
+- Desktop tech: Electron (npm-only internal build requirement)
 - Web transport: `ws`/`wss`
-- Desktop transport: `mqtt`/`mqtts`
+- Desktop transport: `mqtt`/`mqtts`/`ws`/`wss` in the Electron main process
 - Sparkplug B scope (v1): Decode-only
 - Auth: username/password + mTLS
 - Must-have v1 features:
@@ -30,7 +30,9 @@
 - [x] Payload viewer + retained editor
 - [x] Publish panel
 - [x] Opt-in history capture + chart
-- [x] Desktop raw MQTT transport (Tauri Rust) with username/password + mTLS inputs
+- [x] Electron desktop foundation with a sandboxed renderer and typed preload bridge
+- [x] Main-process MQTT.js transport with username/password + mTLS inputs
+- [x] OS-encrypted desktop credential storage
 - [x] Connection-time subscription filter controls + wildcard presets
 - [x] Topic tree usability pass: inline payload previews + recent-message highlight
 - [x] Workspace usability pass: collapsible and focusable publish/history panels
@@ -49,5 +51,18 @@
 
 ### M4
 - Cloudflare deployment pipeline
-- Desktop packaging and release automation
+- Electron Forge packaging and release automation
 - Cross-platform QA matrix
+
+## Electron Migration Gates
+
+- [x] Electron main/preload build uses the existing npm workspace
+- [x] Renderer is sandboxed with context isolation and Node integration disabled
+- [x] Raw MQTT/TLS transport is implemented without Rust/Cargo
+- [x] macOS application packaging succeeds
+- [ ] Packaged macOS broker connection smoke test
+- [ ] Packaged Windows application and broker connection smoke test
+- [ ] Configure company Electron binary mirror/cache in internal CI
+- [ ] Configure macOS and Windows signing credentials
+- [x] Remove Tauri runtime and npm dependencies from the active build
+- [ ] Remove the transitional Tauri source after packaged Windows parity

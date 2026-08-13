@@ -1,6 +1,8 @@
 node_modules
 dist
 .vite
+apps/client/.electron
+apps/client/out
 .DS_Store
 *.log
 apps/client/src-tauri/target

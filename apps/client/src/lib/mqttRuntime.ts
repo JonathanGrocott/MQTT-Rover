@@ -1,6 +1,4 @@
 import mqtt, { IClientOptions, MqttClient } from "mqtt";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import {
   bytesToHex,
   ConnectionProfile,
@@ -9,30 +7,13 @@ import {
   PublishRequest,
   SubscriptionRequest
 } from "@mqtt-rover/protocol";
-import { errorMessage } from "./errors";
 import { resolveInitialSubscriptions } from "./subscriptions";
+import { getElectronBridge } from "../desktop/electronBridge";
 
 interface RuntimeHandlers {
   onMessage: (message: MessageEnvelope) => void;
   onState: (state: "connecting" | "connected" | "disconnected" | "error") => void;
   onError: (message: string) => void;
-}
-
-interface TauriIncomingMessage {
-  topic: string;
-  payload: number[];
-  qos: 0 | 1 | 2;
-  retain: boolean;
-  timestamp: number;
-  mqtt5?: MessageEnvelope["mqtt5"];
-}
-
-function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
-function shouldUseTcpTauri(profile: ConnectionProfile): boolean {
-  return isTauriRuntime() && (profile.protocol === "mqtt" || profile.protocol === "mqtts");
 }
 
 function toUrl(profile: ConnectionProfile): string {
@@ -108,21 +89,58 @@ function mqtt5BinaryToDisplay(value: unknown): string | undefined {
 
 export class MqttRuntime {
   private webClient: MqttClient | null = null;
-  private unlistenFns: UnlistenFn[] = [];
-  private mode: "none" | "web" | "tauri" = "none";
+  private electronCleanupFns: Array<() => void> = [];
+  private mode: "none" | "web" | "electron" = "none";
 
   async connect(profile: ConnectionProfile, handlers: RuntimeHandlers): Promise<void> {
     await this.disconnect();
     handlers.onState("connecting");
 
-    if (shouldUseTcpTauri(profile)) {
-      this.mode = "tauri";
-      await this.connectThroughTauri(profile, handlers);
+    if (getElectronBridge()) {
+      this.mode = "electron";
+      await this.connectThroughElectron(profile, handlers);
       return;
+    }
+
+    if (profile.protocol === "mqtt" || profile.protocol === "mqtts") {
+      throw new Error("Raw MQTT connections require the desktop application");
     }
 
     this.mode = "web";
     this.connectThroughWebSocket(profile, handlers);
+  }
+
+  private async connectThroughElectron(
+    profile: ConnectionProfile,
+    handlers: RuntimeHandlers
+  ): Promise<void> {
+    const bridge = getElectronBridge();
+    if (!bridge) {
+      throw new Error("Electron desktop bridge is unavailable");
+    }
+
+    this.electronCleanupFns = [
+      bridge.onMessageBatch((messages) => {
+        for (const message of messages) {
+          handlers.onMessage({
+            ...message,
+            payload: new Uint8Array(message.payload)
+          });
+        }
+      }),
+      bridge.onStatus(handlers.onState),
+      bridge.onError((message) => {
+        handlers.onState("error");
+        handlers.onError(message);
+      })
+    ];
+
+    try {
+      await bridge.connect(profile);
+    } catch (error) {
+      this.clearElectronListeners();
+      throw error;
+    }
   }
 
   private connectThroughWebSocket(
@@ -257,57 +275,11 @@ export class MqttRuntime {
     });
   }
 
-  private async connectThroughTauri(
-    profile: ConnectionProfile,
-    handlers: RuntimeHandlers
-  ): Promise<void> {
-    const messageUnlisten = await listen<TauriIncomingMessage>(
-      "mqtt://message",
-      (event) => {
-        const payload = event.payload;
-        handlers.onMessage({
-          topic: payload.topic,
-          payload: new Uint8Array(payload.payload),
-          qos: payload.qos,
-          retain: payload.retain,
-          timestamp: payload.timestamp,
-          mqtt5: payload.mqtt5
-        });
-      }
-    );
-
-    const statusUnlisten = await listen<string>("mqtt://status", (event) => {
-      const status = event.payload;
-      if (
-        status === "connecting" ||
-        status === "connected" ||
-        status === "disconnected" ||
-        status === "error"
-      ) {
-        handlers.onState(status);
-      }
-    });
-
-    const errorUnlisten = await listen<string>("mqtt://error", (event) => {
-      handlers.onState("error");
-      handlers.onError(event.payload);
-    });
-
-    this.unlistenFns = [messageUnlisten, statusUnlisten, errorUnlisten];
-    try {
-      await invoke("connect_tcp", { profile });
-    } catch (error) {
-      for (const fn of this.unlistenFns) {
-        await fn();
-      }
-      this.unlistenFns = [];
-      throw new Error(errorMessage(error));
-    }
-  }
-
   async publish(request: PublishRequest): Promise<void> {
-    if (this.mode === "tauri") {
-      await invoke("publish_tcp", { request });
+    if (this.mode === "electron") {
+      const bridge = getElectronBridge();
+      if (!bridge) throw new Error("Electron desktop bridge is unavailable");
+      await bridge.publish(request);
       return;
     }
 
@@ -352,8 +324,10 @@ export class MqttRuntime {
       throw new Error("Topic filter is required");
     }
 
-    if (this.mode === "tauri") {
-      await invoke("subscribe_tcp", { request });
+    if (this.mode === "electron") {
+      const bridge = getElectronBridge();
+      if (!bridge) throw new Error("Electron desktop bridge is unavailable");
+      await bridge.subscribe(request);
       return;
     }
 
@@ -399,8 +373,10 @@ export class MqttRuntime {
       throw new Error("Topic filter is required");
     }
 
-    if (this.mode === "tauri") {
-      await invoke("unsubscribe_tcp", { topicFilter });
+    if (this.mode === "electron") {
+      const bridge = getElectronBridge();
+      if (!bridge) throw new Error("Electron desktop bridge is unavailable");
+      await bridge.unsubscribe(topicFilter);
       return;
     }
 
@@ -427,15 +403,19 @@ export class MqttRuntime {
       this.webClient = null;
     }
 
-    if (this.mode === "tauri") {
-      await invoke("disconnect_tcp").catch(() => undefined);
-      for (const fn of this.unlistenFns) {
-        await fn();
-      }
-      this.unlistenFns = [];
+    if (this.mode === "electron") {
+      await getElectronBridge()?.disconnect().catch(() => undefined);
+      this.clearElectronListeners();
     }
 
     this.mode = "none";
+  }
+
+  private clearElectronListeners(): void {
+    for (const cleanup of this.electronCleanupFns) {
+      cleanup();
+    }
+    this.electronCleanupFns = [];
   }
 }
 

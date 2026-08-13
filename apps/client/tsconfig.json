@@ -8,5 +8,5 @@
       "@mqtt-rover/sparkplug": ["../../packages/sparkplug/src/index.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "electron"]
 }
