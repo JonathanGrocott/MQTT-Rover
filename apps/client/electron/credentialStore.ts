@@ -1,5 +1,5 @@
 import { app, safeStorage } from "electron";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ConnectionProfile } from "@mqtt-rover/protocol";
 
@@ -25,14 +25,7 @@ export class CredentialStore {
 
   async hydrateAndStore(profile: ConnectionProfile): Promise<ConnectionProfile> {
     const stored = await this.readProfileSecrets(profile.id);
-    const supplied: StoredSecrets = {};
-
-    for (const field of SECRET_FIELDS) {
-      const value = profile[field];
-      if (typeof value === "string" && value.length > 0) {
-        supplied[field] = value;
-      }
-    }
+    const supplied = this.secretsFromProfile(profile);
 
     if (Object.keys(supplied).length > 0) {
       await this.writeProfileSecrets(profile.id, { ...stored, ...supplied });
@@ -43,6 +36,49 @@ export class CredentialStore {
       ...stored,
       ...supplied
     };
+  }
+
+  async migrateProfiles(profiles: ConnectionProfile[]): Promise<string[]> {
+    const migratedProfileIds: string[] = [];
+    for (const profile of profiles) {
+      const supplied = this.secretsFromProfile(profile);
+      if (Object.keys(supplied).length === 0) {
+        continue;
+      }
+      const stored = await this.readProfileSecrets(profile.id);
+      await this.writeProfileSecrets(profile.id, { ...stored, ...supplied });
+      migratedProfileIds.push(profile.id);
+    }
+    return migratedProfileIds;
+  }
+
+  async deleteProfile(profileId: string): Promise<void> {
+    this.writeChain = this.writeChain.then(async () => {
+      const allSecrets = await this.readEncryptedFile();
+      if (!(profileId in allSecrets)) {
+        return;
+      }
+      delete allSecrets[profileId];
+      if (Object.keys(allSecrets).length === 0) {
+        await unlink(this.filePath).catch((error: NodeJS.ErrnoException) => {
+          if (error.code !== "ENOENT") throw error;
+        });
+        return;
+      }
+      await this.writeEncryptedFile(allSecrets);
+    });
+    await this.writeChain;
+  }
+
+  private secretsFromProfile(profile: ConnectionProfile): StoredSecrets {
+    const supplied: StoredSecrets = {};
+    for (const field of SECRET_FIELDS) {
+      const value = profile[field];
+      if (typeof value === "string" && value.length > 0) {
+        supplied[field] = value;
+      }
+    }
+    return supplied;
   }
 
   private async readProfileSecrets(profileId: string): Promise<StoredSecrets> {
@@ -76,13 +112,7 @@ export class CredentialStore {
     this.writeChain = this.writeChain.then(async () => {
       const allSecrets = await this.readEncryptedFile();
       allSecrets[profileId] = encrypted;
-      await mkdir(path.dirname(this.filePath), { recursive: true });
-      const temporaryPath = `${this.filePath}.tmp`;
-      await writeFile(temporaryPath, JSON.stringify(allSecrets), {
-        encoding: "utf8",
-        mode: 0o600
-      });
-      await rename(temporaryPath, this.filePath);
+      await this.writeEncryptedFile(allSecrets);
     });
 
     await this.writeChain;
@@ -101,5 +131,15 @@ export class CredentialStore {
       }
       throw error;
     }
+  }
+
+  private async writeEncryptedFile(value: EncryptedSecretFile): Promise<void> {
+    await mkdir(path.dirname(this.filePath), { recursive: true });
+    const temporaryPath = `${this.filePath}.tmp`;
+    await writeFile(temporaryPath, JSON.stringify(value), {
+      encoding: "utf8",
+      mode: 0o600
+    });
+    await rename(temporaryPath, this.filePath);
   }
 }

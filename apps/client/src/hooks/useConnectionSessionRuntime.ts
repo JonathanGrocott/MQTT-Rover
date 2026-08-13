@@ -10,6 +10,8 @@ import { ManagedSubscription } from "../components/connection-toolbar/types";
 import { errorMessage } from "../lib/errors";
 import { mqttRuntime } from "../lib/mqttRuntime";
 import { resolveInitialSubscriptions } from "../lib/subscriptions";
+import { getElectronBridge } from "../desktop/electronBridge";
+import { useAppStore } from "../store/useAppStore";
 
 interface Args {
   profile: ConnectionProfile | null;
@@ -86,6 +88,9 @@ export function useConnectionSessionRuntime({
           setConnectionState("error", message);
         }
       });
+      if (getElectronBridge()) {
+        useAppStore.getState().clearProfileSecrets([connectProfile.id]);
+      }
     } catch (error) {
       const message = errorMessage(error);
       setConnectionState("error", message);

@@ -7,6 +7,7 @@ import {
   SubscriptionRequest,
   tryExtractNumericValue
 } from "@mqtt-rover/protocol";
+import { getElectronBridge } from "../desktop/electronBridge";
 
 export interface TopicTreeNode {
   name: string;
@@ -78,6 +79,7 @@ interface AppState {
   upsertProfile: (profile: ConnectionProfile) => void;
   createProfile: () => void;
   removeActiveProfile: () => void;
+  clearProfileSecrets: (profileIds: string[]) => void;
   setActiveProfile: (id: string) => void;
   updateActiveProfile: (patch: Partial<ConnectionProfile>) => void;
   ingestMessages: (messages: MessageEnvelope[]) => void;
@@ -266,6 +268,10 @@ export const useAppStore = create<AppState>()(
           return;
         }
 
+        void getElectronBridge()?.deleteSecrets(activeId).catch((error) => {
+          console.error("Failed to remove stored profile credentials", error);
+        });
+
         const nextProfiles = get().profiles.filter(
           (profile) => profile.id !== activeId
         );
@@ -277,6 +283,18 @@ export const useAppStore = create<AppState>()(
         }
 
         set({ profiles: nextProfiles, activeProfileId: nextProfiles[0]?.id ?? null });
+      },
+
+      clearProfileSecrets: (profileIds) => {
+        const ids = new Set(profileIds);
+        if (ids.size === 0) {
+          return;
+        }
+        set({
+          profiles: get().profiles.map((profile) =>
+            ids.has(profile.id) ? profileWithoutPersistedSecrets(profile) : profile
+          )
+        });
       },
 
       setActiveProfile: (id) => {

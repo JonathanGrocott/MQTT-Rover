@@ -12,6 +12,8 @@ export const ELECTRON_IPC = {
   publish: "mqtt-rover:mqtt:publish",
   subscribe: "mqtt-rover:mqtt:subscribe",
   unsubscribe: "mqtt-rover:mqtt:unsubscribe",
+  migrateSecrets: "mqtt-rover:credentials:migrate",
+  deleteSecrets: "mqtt-rover:credentials:delete",
   messageBatch: "mqtt-rover:mqtt:message-batch",
   status: "mqtt-rover:mqtt:status",
   error: "mqtt-rover:mqtt:error"
@@ -23,6 +25,8 @@ export interface ElectronMqttBridge {
   publish(request: PublishRequest): Promise<void>;
   subscribe(request: SubscriptionRequest): Promise<void>;
   unsubscribe(topicFilter: string): Promise<void>;
+  migrateSecrets(profiles: ConnectionProfile[]): Promise<string[]>;
+  deleteSecrets(profileId: string): Promise<void>;
   onMessageBatch(listener: (messages: MessageEnvelope[]) => void): () => void;
   onStatus(listener: (state: ConnectionState) => void): () => void;
   onError(listener: (message: string) => void): () => void;

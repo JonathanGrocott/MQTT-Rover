@@ -65,4 +65,4 @@
 - [ ] Configure company Electron binary mirror/cache in internal CI
 - [ ] Configure macOS and Windows signing credentials
 - [x] Remove Tauri runtime and npm dependencies from the active build
-- [ ] Remove the transitional Tauri source after packaged Windows parity
+- [x] Remove the transitional Tauri implementation after packaged Windows parity

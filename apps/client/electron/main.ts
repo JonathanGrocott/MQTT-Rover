@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, session } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -54,6 +54,17 @@ function validateSubscriptionRequest(value: SubscriptionRequest): void {
   }
 }
 
+function assertTrustedSender(event: Electron.IpcMainInvokeEvent): void {
+  if (
+    !mainWindow ||
+    mainWindow.isDestroyed() ||
+    event.sender.id !== mainWindow.webContents.id ||
+    event.senderFrame !== mainWindow.webContents.mainFrame
+  ) {
+    throw new Error("Rejected IPC request from an untrusted renderer");
+  }
+}
+
 function send(channel: string, payload: unknown): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
@@ -77,12 +88,7 @@ function createWindow(): void {
   });
 
   mainWindow.once("ready-to-show", () => mainWindow?.show());
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("https://")) {
-      void shell.openExternal(url);
-    }
-    return { action: "deny" };
-  });
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-navigate", (event, url) => {
     const developmentUrl = process.env.MQTT_ROVER_DEV_SERVER_URL;
     let isAllowedDevelopmentNavigation = false;
@@ -121,39 +127,70 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     ELECTRON_IPC.connect,
-    async (_event, profile: ConnectionProfile) => {
+    async (event, profile: ConnectionProfile) => {
+      assertTrustedSender(event);
       validateConnectionProfile(profile);
       const hydratedProfile = await credentials.hydrateAndStore(profile);
       await sessionManager?.connect(hydratedProfile);
     }
   );
-  ipcMain.handle(ELECTRON_IPC.disconnect, () => sessionManager?.disconnect());
+  ipcMain.handle(ELECTRON_IPC.disconnect, (event) => {
+    assertTrustedSender(event);
+    return sessionManager?.disconnect();
+  });
   ipcMain.handle(
     ELECTRON_IPC.publish,
-    (_event, request: PublishRequest) => {
+    (event, request: PublishRequest) => {
+      assertTrustedSender(event);
       validatePublishRequest(request);
       return sessionManager?.publish(request);
     }
   );
   ipcMain.handle(
     ELECTRON_IPC.subscribe,
-    (_event, request: SubscriptionRequest) => {
+    (event, request: SubscriptionRequest) => {
+      assertTrustedSender(event);
       validateSubscriptionRequest(request);
       return sessionManager?.subscribe(request);
     }
   );
   ipcMain.handle(
     ELECTRON_IPC.unsubscribe,
-    (_event, topicFilter: string) => {
+    (event, topicFilter: string) => {
+      assertTrustedSender(event);
       if (typeof topicFilter !== "string" || !topicFilter.trim()) {
         throw new Error("Invalid topic filter");
       }
       return sessionManager?.unsubscribe(topicFilter);
     }
   );
+  ipcMain.handle(
+    ELECTRON_IPC.migrateSecrets,
+    (event, profiles: ConnectionProfile[]) => {
+      assertTrustedSender(event);
+      if (!Array.isArray(profiles) || profiles.length > 1_000) {
+        throw new Error("Invalid credential migration request");
+      }
+      for (const profile of profiles) {
+        validateConnectionProfile(profile);
+      }
+      return credentials.migrateProfiles(profiles);
+    }
+  );
+  ipcMain.handle(ELECTRON_IPC.deleteSecrets, (event, profileId: string) => {
+    assertTrustedSender(event);
+    if (typeof profileId !== "string" || !profileId.trim()) {
+      throw new Error("Invalid profile identifier");
+    }
+    return credentials.deleteProfile(profileId);
+  });
 }
 
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => callback(false)
+  );
   registerIpcHandlers();
   createWindow();
   app.on("activate", () => {
