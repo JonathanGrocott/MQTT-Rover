@@ -71,8 +71,7 @@ Notes:
 - Electron requires its platform binary to be available through npm's download path, an internal
   `ELECTRON_MIRROR`, or a pre-populated cache.
 - CI runs web checks plus packaged Electron builds on macOS and Windows.
-- The previous Tauri source remains temporarily under `apps/client/src-tauri` for migration comparison
-  and will be removed after packaged-app connection parity is verified.
+- The active desktop build is npm-only and does not require Rust, Cargo, or crates.io.
 
 ## Package (Desktop)
 ```bash

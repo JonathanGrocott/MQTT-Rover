@@ -32,6 +32,10 @@ const bridge: ElectronMqttBridge = {
     ipcRenderer.invoke(ELECTRON_IPC.subscribe, request),
   unsubscribe: (topicFilter: string) =>
     ipcRenderer.invoke(ELECTRON_IPC.unsubscribe, topicFilter),
+  migrateSecrets: (profiles: ConnectionProfile[]) =>
+    ipcRenderer.invoke(ELECTRON_IPC.migrateSecrets, profiles),
+  deleteSecrets: (profileId: string) =>
+    ipcRenderer.invoke(ELECTRON_IPC.deleteSecrets, profileId),
   onMessageBatch: (listener: (messages: MessageEnvelope[]) => void) =>
     subscribeToEvent(ELECTRON_IPC.messageBatch, listener),
   onStatus: (listener: (state: ConnectionState) => void) =>
