@@ -354,28 +354,28 @@ export const useAppStore = create<AppState>()(
           }
           deltaByTopic.set(message.topic, (deltaByTopic.get(message.topic) ?? 0) + 1);
 
-          const nextRecord: TopicMessageRecord = {
-            sequence: ++messageSequence,
-            topic: message.topic,
-            payload: new Uint8Array(message.payload),
-            qos: message.qos,
-            retain: message.retain,
-            timestamp: message.timestamp,
-            mqtt5: message.mqtt5
-          };
-          const currentHistory = messageHistoryByTopic.get(message.topic) ?? [];
-          const nextHistory =
-            currentHistory.length >= MESSAGE_HISTORY_LIMIT
-              ? [
-                  ...currentHistory.slice(
-                    currentHistory.length - MESSAGE_HISTORY_LIMIT + 1
-                  ),
-                  nextRecord
-                ]
-              : [...currentHistory, nextRecord];
-          messageHistoryByTopic.set(message.topic, nextHistory);
-
           if (enabledHistory.has(message.topic)) {
+            const nextRecord: TopicMessageRecord = {
+              sequence: ++messageSequence,
+              topic: message.topic,
+              payload: new Uint8Array(message.payload),
+              qos: message.qos,
+              retain: message.retain,
+              timestamp: message.timestamp,
+              mqtt5: message.mqtt5
+            };
+            const currentHistory = messageHistoryByTopic.get(message.topic) ?? [];
+            const nextHistory =
+              currentHistory.length >= MESSAGE_HISTORY_LIMIT
+                ? [
+                    ...currentHistory.slice(
+                      currentHistory.length - MESSAGE_HISTORY_LIMIT + 1
+                    ),
+                    nextRecord
+                  ]
+                : [...currentHistory, nextRecord];
+            messageHistoryByTopic.set(message.topic, nextHistory);
+
             const numeric = tryExtractNumericValue(message.payload);
             if (numeric !== null) {
               let series = historyByTopic.get(message.topic);
@@ -453,6 +453,16 @@ export const useAppStore = create<AppState>()(
         const enabled = new Set(get().historyEnabledTopics);
         if (enabled.has(topic)) {
           enabled.delete(topic);
+          const historyByTopic = new Map(get().historyByTopic);
+          const messageHistoryByTopic = new Map(get().messageHistoryByTopic);
+          historyByTopic.delete(topic);
+          messageHistoryByTopic.delete(topic);
+          set({
+            historyEnabledTopics: enabled,
+            historyByTopic,
+            messageHistoryByTopic
+          });
+          return;
         } else {
           enabled.add(topic);
         }

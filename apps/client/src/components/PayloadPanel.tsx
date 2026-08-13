@@ -289,7 +289,11 @@ export function PayloadPanel({
       <details className="payload-history">
         <summary>Message History ({messageHistory.length})</summary>
         <div className="payload-history-list">
-          {recentHistory.length === 0 ? (
+          {!historyEnabled ? (
+            <div className="payload-history-empty">
+              Start History to record messages for this topic.
+            </div>
+          ) : recentHistory.length === 0 ? (
             <div className="payload-history-empty">No messages recorded yet.</div>
           ) : (
             recentHistory.map((entry) => {

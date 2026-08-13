@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageEnvelope } from "@mqtt-rover/protocol";
 import { TimelineEntry } from "../components/TimelinePanel";
+import { useAppStore } from "../store/useAppStore";
 
 const TIMELINE_LIMIT = 4000;
 
@@ -45,7 +46,10 @@ export function useTimelineRuntime() {
   }, []);
 
   const queueLiveMessage = useCallback((message: MessageEnvelope) => {
-    if (pausedRef.current) {
+    if (
+      pausedRef.current ||
+      !useAppStore.getState().historyEnabledTopics.has(message.topic)
+    ) {
       return;
     }
 
@@ -134,6 +138,30 @@ export function useTimelineRuntime() {
 
     pushNext();
   }, [appendMessages, clearReplayTimer]);
+
+  useEffect(() => {
+    return useAppStore.subscribe((state, previousState) => {
+      if (state.historyEnabledTopics === previousState.historyEnabledTopics) {
+        return;
+      }
+
+      const disabledTopics = new Set(
+        Array.from(previousState.historyEnabledTopics).filter(
+          (topic) => !state.historyEnabledTopics.has(topic)
+        )
+      );
+      if (disabledTopics.size === 0) {
+        return;
+      }
+
+      queueRef.current = queueRef.current.filter((entry) =>
+        !disabledTopics.has(entry.message.topic)
+      );
+      setTimelineEntries((current) =>
+        current.filter((entry) => !disabledTopics.has(entry.message.topic))
+      );
+    });
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
