@@ -7,7 +7,7 @@ export interface TopicRow {
   hasChildren: boolean;
   childCount: number;
   topicCount: number;
-  messageCount: number;
+  directMessageCount: number;
   expanded: boolean;
   directActivityAt: number;
   directPulseAt: number;

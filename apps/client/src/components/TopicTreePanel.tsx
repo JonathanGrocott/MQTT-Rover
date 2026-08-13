@@ -3,6 +3,7 @@ import { TopicSnapshot, useAppStore } from "../store/useAppStore";
 import { useVirtualRows } from "../hooks/useVirtualRows";
 import { TopicRow, TopicWorkerResponse } from "../types/topicRows";
 import { activityDurations } from "../lib/topicActivity";
+import { formatCompactCount, formatExactCount } from "../lib/formatCount";
 
 interface Props {
   selectedTopic: string | null;
@@ -184,7 +185,7 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
                 shouldPulse ? "pulse-update" : ""
               } ${
                 hasChildren ? "branch-row" : "leaf-row"
-              }`}
+              } ${item.isLeaf ? "endpoint-row" : ""}`}
               style={{ height: `${ROW_HEIGHT}px` }}
               onClick={() => {
                 if (item.isLeaf) {
@@ -208,14 +209,23 @@ export function TopicTreePanel({ selectedTopic, topics }: Props) {
                 {item.isLeaf && topic ? (
                   <span className="topic-preview">= {topic.preview}</span>
                 ) : null}
-                {!item.isLeaf ? (
-                  <span className="branch-meta">
-                    {item.topicCount} topics, {item.messageCount} messages
+                {hasChildren ? (
+                  <span
+                    className="branch-meta"
+                    title={`${formatExactCount(item.topicCount)} descendant topics`}
+                  >
+                    {formatCompactCount(item.topicCount)} {item.topicCount === 1 ? "topic" : "topics"}
                   </span>
                 ) : null}
               </span>
               {item.isLeaf && topic ? (
-                <span className="topic-msg-count">{topic.messageCount}</span>
+                <span
+                  className="topic-msg-count"
+                  title={`${formatExactCount(topic.messageCount)} messages received on this topic`}
+                  aria-label={`${formatExactCount(topic.messageCount)} messages received on this topic`}
+                >
+                  {formatCompactCount(topic.messageCount)}
+                </span>
               ) : null}
               {activityMode === "full" && burstCount > 0 ? (
                 <span className="new-msg-chip">+{formatBurstCount(burstCount)}</span>

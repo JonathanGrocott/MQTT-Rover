@@ -14,6 +14,9 @@
     "electron:dev": "npm run electron:dev -w @mqtt-rover/client",
     "electron:build": "npm run electron:build -w @mqtt-rover/client",
     "electron:package": "npm run electron:package -w @mqtt-rover/client",
-    "electron:make": "npm run electron:make -w @mqtt-rover/client"
+    "electron:make": "npm run electron:make -w @mqtt-rover/client",
+    "broker:test:up": "docker compose -f tools/mqtt-load/compose.yml up -d --wait",
+    "broker:test:down": "docker compose -f tools/mqtt-load/compose.yml down",
+    "mqtt:simulate": "npm run mqtt:simulate -w @mqtt-rover/client --"
   }
 }

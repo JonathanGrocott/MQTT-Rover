@@ -57,6 +57,11 @@ npm run build
 npm run electron:dev
 ```
 
+To exercise the desktop client against a disposable, busy local broker, see
+[Local MQTT load testing](docs/load-testing.md). The included simulator can populate up to the
+100,000-topic design target and sustain a configurable message rate without using shared public
+broker capacity.
+
 ## Desktop Status
 Desktop implementation lives under `apps/client/electron`:
 - Broker sockets run in Electron's main process; the renderer has no Node.js access

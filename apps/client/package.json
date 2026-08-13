@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "mqtt:simulate": "node scripts/mqtt-load-simulator.mjs",
     "electron:compile": "vite build --config electron/vite.main.config.ts && vite build --config electron/vite.preload.config.ts",
     "electron:dev": "npm run electron:compile && concurrently -k -s first \"vite --host 127.0.0.1\" \"wait-on tcp:127.0.0.1:5173 && cross-env MQTT_ROVER_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
     "electron:build": "npm run build && npm run electron:compile",

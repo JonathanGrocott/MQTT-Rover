@@ -594,6 +594,7 @@ button:disabled {
 
 .topic-main {
   min-width: 0;
+  overflow: hidden;
   display: inline-flex;
   gap: 6px;
   align-items: baseline;
@@ -607,12 +608,21 @@ button:disabled {
 }
 
 .topic-name {
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
+.endpoint-row .topic-name {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 .topic-preview {
+  flex: 1 1 auto;
+  min-width: 0;
   color: #86a8c9;
   overflow: hidden;
   white-space: nowrap;
@@ -620,6 +630,7 @@ button:disabled {
 }
 
 .branch-meta {
+  flex: 0 0 auto;
   color: #7892ac;
   font-size: 11px;
   letter-spacing: 0.02em;
