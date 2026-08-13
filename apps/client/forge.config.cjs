@@ -5,7 +5,9 @@ const { MakerZIP } = require("@electron-forge/maker-zip");
 module.exports = {
   packagerConfig: {
     asar: true,
-    executableName: "mqtt-rover"
+    executableName: "mqtt-rover",
+    prune: false,
+    ignore: [/^\/node_modules(?:\/|$)/, /^\/out(?:\/|$)/]
   },
   rebuildConfig: {},
   makers: [

@@ -13,21 +13,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "electron:compile": "vite build --config electron/vite.main.config.ts && vite build --config electron/vite.preload.config.ts",
-    "electron:dev": "npm run electron:compile && concurrently -k -s first \"vite\" \"wait-on http://127.0.0.1:5173 && cross-env MQTT_ROVER_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "electron:dev": "npm run electron:compile && concurrently -k -s first \"vite --host 127.0.0.1\" \"wait-on tcp:127.0.0.1:5173 && cross-env MQTT_ROVER_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
     "electron:build": "npm run build && npm run electron:compile",
     "electron:package": "npm run electron:build && electron-forge package",
     "electron:make": "npm run electron:build && electron-forge make"
   },
-  "dependencies": {
+  "devDependencies": {
     "@mqtt-rover/protocol": "file:../../packages/protocol",
     "@mqtt-rover/sparkplug": "file:../../packages/sparkplug",
-    "mqtt": "^5.14.1",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "recharts": "^2.15.3",
-    "zustand": "^5.0.8"
-  },
-  "devDependencies": {
     "@electron-forge/cli": "^7.11.2",
     "@electron-forge/maker-dmg": "^7.11.2",
     "@electron-forge/maker-squirrel": "^7.11.2",
@@ -38,10 +31,15 @@
     "@vitejs/plugin-react": "^4.7.0",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
-    "electron": "^43.4.0",
+    "electron": "39.8.5",
+    "mqtt": "^5.14.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "recharts": "^2.15.3",
     "typescript": "^5.9.2",
     "vite": "^7.1.2",
     "vitest": "^3.2.4",
-    "wait-on": "^9.0.1"
+    "wait-on": "^9.0.1",
+    "zustand": "^5.0.8"
   }
 }
