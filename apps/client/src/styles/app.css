@@ -1110,20 +1110,81 @@ button:disabled {
 }
 
 .publish-form {
+  min-height: 0;
   display: grid;
-  gap: 10px;
-  padding: 10px 12px 12px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 
-.publish-form label {
+.publish-form-body {
+  min-height: 0;
   display: grid;
-  gap: 6px;
-  font-size: 12px;
+  align-content: start;
+  gap: 7px;
+  padding: 8px 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.publish-form-body > label,
+.publish-mqtt5 label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
   color: var(--muted);
 }
 
-.publish-controls {
-  justify-content: flex-start;
+.publish-form-body textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.publish-form-body input,
+.publish-form-body select,
+.publish-form-body textarea {
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+.publish-action-bar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--line);
+  background: #0f1822;
+}
+
+.publish-qos {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.publish-qos select {
+  width: 54px;
+}
+
+.publish-action-bar select,
+.publish-action-bar button {
+  min-height: var(--compact-control-height);
+  padding: 4px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.publish-action-bar .retain-toggle {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.publish-submit {
+  min-width: 82px;
+  margin-left: auto;
 }
 
 .publish-mqtt5 {
