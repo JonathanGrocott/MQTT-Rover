@@ -14,6 +14,7 @@ interface Props {
   messageHistory: TopicMessageRecord[];
   historyEnabled: boolean;
   onToggleHistory: () => void;
+  onShowHistoryChart: () => void;
 }
 
 type PayloadView = "json" | "utf8" | "hex" | "sparkplug" | "mqtt5";
@@ -63,7 +64,8 @@ export function PayloadPanel({
   snapshot,
   messageHistory,
   historyEnabled,
-  onToggleHistory
+  onToggleHistory,
+  onShowHistoryChart
 }: Props) {
   const [activeView, setActiveView] = useState<PayloadView>("json");
   const [viewedSequence, setViewedSequence] = useState<number | null>(null);
@@ -125,9 +127,24 @@ export function PayloadPanel({
       <header className="panel-header">
         <h2>Topic Inspector</h2>
         <div className="inline">
-          <button type="button" className="button-ghost" onClick={onToggleHistory}>
-            {historyEnabled ? "Stop History" : "Start History"}
-          </button>
+          {historyEnabled ? (
+            <>
+              <button
+                type="button"
+                className="button-primary"
+                onClick={onShowHistoryChart}
+              >
+                View Chart
+              </button>
+              <button type="button" className="button-ghost" onClick={onToggleHistory}>
+                Stop History
+              </button>
+            </>
+          ) : (
+            <button type="button" className="button-primary" onClick={onToggleHistory}>
+              Start History
+            </button>
+          )}
         </div>
       </header>
 

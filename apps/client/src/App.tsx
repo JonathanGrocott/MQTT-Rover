@@ -217,6 +217,11 @@ export default function App() {
                 toggleHistoryForTopic(selectedTopic);
               }
             }}
+            onShowHistoryChart={() => {
+              setRightPanelView("history");
+              setHistoryCollapsed(false);
+              setFocusPanel("none");
+            }}
           />
 
           {focusPanel === "none" && !publishCollapsed ? (
