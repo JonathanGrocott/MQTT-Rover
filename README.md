@@ -8,9 +8,8 @@ Current milestone implements:
 - Runtime subscription manager (add/remove topic filters with QoS)
 - Topic tree explorer with worker-based indexing + virtualized rendering
 - Live payload viewer (UTF-8, JSON, HEX)
-- Timeline workflow panel (pause, filter, diff A/B payloads, export JSONL)
-- Timeline bookmarks + advanced filter drawer (payload/QoS/retain/MQTT5/regex)
-- Timeline session import + replay from JSONL/NDJSON exports
+- Multi-topic history overlay for charting selected opt-in histories together
+- JSONL export for selected numeric history series
 - Sparkplug B decode (payload decode-only)
 - Publish panel (QoS + retain + MQTT5 publish properties inspector)
 - Clean-by-default controls with collapsible advanced sections/toolbars

@@ -36,7 +36,7 @@ export function HistoryPanel({
         <h2>History</h2>
         <div className="inline">
           <button type="button" className="button-ghost" onClick={onShowTimeline}>
-            Timeline
+            Overlay
           </button>
           <button type="button" className="button-ghost" onClick={onToggleCollapsed}>
             {collapsed ? "Expand" : "Collapse"}

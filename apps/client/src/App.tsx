@@ -1,15 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { OverloadMode } from "@mqtt-rover/protocol";
 import { ConnectionToolbar } from "./components/ConnectionToolbar";
 import { TopicTreePanel } from "./components/TopicTreePanel";
 import { PayloadPanel } from "./components/PayloadPanel";
 import { PublishPanel } from "./components/PublishPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
-import { TimelinePanel } from "./components/TimelinePanel";
+import { HistoryOverlayPanel } from "./components/HistoryOverlayPanel";
 import { WorkspaceHeader } from "./components/WorkspaceHeader";
 import { useConnectionSessionRuntime } from "./hooks/useConnectionSessionRuntime";
 import { useMessageIngestionRuntime, OverloadPreset } from "./hooks/useMessageIngestionRuntime";
-import { useTimelineRuntime } from "./hooks/useTimelineRuntime";
 import { useWorkspaceLayout } from "./hooks/useWorkspaceLayout";
 import { useActiveProfile, useAppStore } from "./store/useAppStore";
 
@@ -68,17 +67,9 @@ export default function App() {
     ingestMessages
   });
 
-  const {
-    timelinePaused,
-    setTimelinePaused,
-    timelineEntries,
-    rightPanelView,
-    setRightPanelView,
-    queueLiveMessage,
-    clearTimeline,
-    resetTimeline,
-    importTimelineSession
-  } = useTimelineRuntime();
+  const [rightPanelView, setRightPanelView] = useState<"history" | "overlay">(
+    "history"
+  );
 
   const {
     subscriptions,
@@ -93,9 +84,7 @@ export default function App() {
     setConnectionState,
     clearRuntimeData,
     resetRuntimeBuffers,
-    resetTimeline,
     syncRuntimeStats,
-    queueLiveMessage,
     enqueueMessage
   });
 
@@ -136,6 +125,10 @@ export default function App() {
     }
     return historyEnabledTopics.has(selectedTopic);
   }, [historyEnabledTopics, selectedTopic]);
+  const enabledHistoryTopics = useMemo(
+    () => Array.from(historyEnabledTopics).sort(),
+    [historyEnabledTopics]
+  );
 
   return (
     <main
@@ -302,16 +295,16 @@ export default function App() {
                     current === "history" ? "none" : "history"
                   );
                 }}
-                onShowTimeline={() => setRightPanelView("timeline")}
+                onShowTimeline={() => setRightPanelView("overlay")}
               />
             )
             : (
-              <TimelinePanel
-                messages={timelineEntries}
-                advancedMode={viewPreset === "advanced"}
+              <HistoryOverlayPanel
+                enabledTopics={enabledHistoryTopics}
+                historyByTopic={historyByTopic}
+                selectedTopic={selectedTopic}
                 collapsed={false}
                 focused={focusPanel === "history"}
-                paused={timelinePaused}
                 onToggleCollapsed={() => {
                   setHistoryCollapsed(true);
                   setFocusPanel("none");
@@ -322,11 +315,6 @@ export default function App() {
                     current === "history" ? "none" : "history"
                   );
                 }}
-                onTogglePaused={() => {
-                  setTimelinePaused((current) => !current);
-                }}
-                onClear={clearTimeline}
-                onImportSession={importTimelineSession}
                 onShowHistory={() => setRightPanelView("history")}
               />
             )

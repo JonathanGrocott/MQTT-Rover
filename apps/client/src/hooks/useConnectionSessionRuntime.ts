@@ -22,9 +22,7 @@ interface Args {
   ) => void;
   clearRuntimeData: () => void;
   resetRuntimeBuffers: () => void;
-  resetTimeline: () => void;
   syncRuntimeStats: () => void;
-  queueLiveMessage: (message: MessageEnvelope) => void;
   enqueueMessage: (message: MessageEnvelope) => void;
 }
 
@@ -34,9 +32,7 @@ export function useConnectionSessionRuntime({
   setConnectionState,
   clearRuntimeData,
   resetRuntimeBuffers,
-  resetTimeline,
   syncRuntimeStats,
-  queueLiveMessage,
   enqueueMessage
 }: Args) {
   const [subscriptions, setSubscriptions] = useState<ManagedSubscription[]>([]);
@@ -53,7 +49,6 @@ export function useConnectionSessionRuntime({
     }
 
     resetRuntimeBuffers();
-    resetTimeline();
     syncRuntimeStats();
 
     clearRuntimeData();
@@ -68,7 +63,6 @@ export function useConnectionSessionRuntime({
       };
       await mqttRuntime.connect(connectProfile, {
         onMessage: (message) => {
-          queueLiveMessage(message);
           enqueueMessage(message);
         },
         onState: (state) => {
@@ -107,9 +101,7 @@ export function useConnectionSessionRuntime({
     clearRuntimeData,
     enqueueMessage,
     profile,
-    queueLiveMessage,
     resetRuntimeBuffers,
-    resetTimeline,
     setConnectionState,
     syncRuntimeStats
   ]);
@@ -117,13 +109,11 @@ export function useConnectionSessionRuntime({
   const disconnect = useCallback(async () => {
     await mqttRuntime.disconnect();
     resetRuntimeBuffers();
-    resetTimeline();
     syncRuntimeStats();
     setConnectionState("disconnected");
     setSubscriptions([]);
   }, [
     resetRuntimeBuffers,
-    resetTimeline,
     setConnectionState,
     syncRuntimeStats
   ]);
