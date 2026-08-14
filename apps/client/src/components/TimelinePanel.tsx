@@ -324,7 +324,7 @@ export function TimelinePanel({
         <h2>Timeline</h2>
         <div className="inline">
           <button type="button" className="button-ghost" onClick={onShowHistory}>
-            History
+            Chart
           </button>
           <button type="button" className="button-ghost" onClick={onToggleCollapsed}>
             {collapsed ? "Expand" : "Collapse"}
@@ -538,6 +538,16 @@ export function TimelinePanel({
                   <div className="timeline-row-actions">
                     <button
                       type="button"
+                      aria-label={
+                        bookmarkSet.has(entry.id)
+                          ? "Remove message bookmark"
+                          : "Bookmark message"
+                      }
+                      title={
+                        bookmarkSet.has(entry.id)
+                          ? "Remove bookmark"
+                          : "Bookmark message"
+                      }
                       className={
                         bookmarkSet.has(entry.id) ? "button-primary" : "button-ghost"
                       }
@@ -553,6 +563,8 @@ export function TimelinePanel({
                     </button>
                     <button
                       type="button"
+                      aria-label="Use message as comparison A"
+                      title="Use as comparison A"
                       className={leftId === entry.id ? "button-primary" : "button-ghost"}
                       onClick={() => setLeftId(entry.id)}
                     >
@@ -560,6 +572,8 @@ export function TimelinePanel({
                     </button>
                     <button
                       type="button"
+                      aria-label="Use message as comparison B"
+                      title="Use as comparison B"
                       className={rightId === entry.id ? "button-primary" : "button-ghost"}
                       onClick={() => setRightId(entry.id)}
                     >
