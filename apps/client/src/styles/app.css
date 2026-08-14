@@ -53,6 +53,17 @@ p {
   overflow: hidden;
 }
 
+.app-shell * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.app-shell *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -861,7 +872,6 @@ button:disabled {
   grid-template-rows: auto auto minmax(220px, 1fr) auto auto;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
 }
 
 .topic-summary {
@@ -877,7 +887,6 @@ button:disabled {
   align-items: center;
   gap: 4px;
   overflow-x: auto;
-  scrollbar-width: thin;
 }
 
 .topic-breadcrumb-part {

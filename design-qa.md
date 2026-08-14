@@ -1,57 +1,52 @@
-# History right-column layout design QA
+# Hidden scrollbar treatment design QA
 
 final result: passed
 
 ## Comparison target
 
-- Source visual truth: user-provided conversation attachment `Electron Appshot 2026-08-13T23-48-45.073Z.png`, showing the History chart incorrectly placed below the tree and inspector and Message History painting over Current Value. The attachment is conversation-owned and has no exposed local filesystem path.
-- Supporting pre-change reference: `/Users/jg/.codex/visualizations/2026/08/13/019ffc1d-c24e-77d0-a229-8e737a345645/mqtt-ui-audit/04-mqtt-rover-expanded-tree.png`.
-- Final Electron screenshot: `/Users/jg/.codex/visualizations/2026/08/13/019ffc1d-c24e-77d0-a229-8e737a345645/mqtt-ui-audit/07-history-right-column-expanded.jpeg`.
-- Browser responsive-layout screenshot: `/Users/jg/.codex/visualizations/2026/08/13/019ffc1d-c24e-77d0-a229-8e737a345645/mqtt-ui-audit/08-history-three-column-browser.png`.
-- Source attachment pixels: 1692 × 768. The Electron source capture is approximately a 1.322× representation of the 1280 × 581 CSS window used for the implementation capture, so composition was compared after accounting for that density difference.
-- Final Electron pixels: 1280 × 581 at the native Computer Use capture density.
-- Browser verification viewport and pixels: 1280 × 720 at 1× density.
-- State: 25,000-topic namespace at approximately 2,000 messages/sec, numeric topic selected, chart recording, and Message History expanded.
+- Source visual truth: user-provided conversation attachment `Electron Appshot 2026-08-13T23-59-54.609Z.png`, showing bright native scrollbar tracks in the topic tree, inspector, payload viewer, and Message History. The conversation-owned attachment has no exposed local filesystem path.
+- Final Electron screenshot: `/Users/jg/.codex/visualizations/2026/08/13/019ffc1d-c24e-77d0-a229-8e737a345645/mqtt-ui-audit/09-hidden-scrollbars-electron.jpeg`.
+- Browser verification screenshot: `/Users/jg/.codex/visualizations/2026/08/13/019ffc1d-c24e-77d0-a229-8e737a345645/mqtt-ui-audit/10-hidden-scrollbars-browser.png`.
+- Source attachment pixels: 1692 × 768. The source is approximately a 1.322× representation of the 1280 × 581 Electron CSS window, so the final Electron capture was compared after accounting for that density difference.
+- Final Electron pixels: 1280 × 581.
+- Browser viewport and pixels: 1280 × 720 at 1× density.
+- State: connected to the 25,000-topic load test at approximately 2,000 messages/sec, history chart active, Message History expanded, and topic tree scrolled away from its initial position.
 
 ## Full-view comparison evidence
 
-The supplied source attachment and final Electron capture were reviewed together in the same implementation turn. The source shows two columns above a full-width bottom chart; the final capture keeps Topic Explorer, Topic Inspector, and History in one desktop row. The live chart occupies the far-right column and does not reduce the vertical workspace available to the tree. At the 1280px browser breakpoint the measured tracks were 561px tree, 366px inspector, and 293px history, plus two 10px resize handles.
+The source attachment and final Electron screenshot were reviewed together in this implementation turn. The source contains four highly visible white native scrollbar tracks that interrupt the dark panel surfaces. The final capture preserves the same three-column layout and content density while removing all painted tracks, thumbs, and reserved scrollbar gutters.
 
 ## Focused-region comparison evidence
 
-The inspector and chart region was inspected at full capture resolution with Message History expanded. The source shows Message History rows painting across the Current Value region. The final Electron capture shows Current Value, the bounded Message History viewport, Retained Editor, and the right-side chart as separate non-overlapping regions. The History header exposes Timeline, Collapse, and Focus without clipping.
+The tree's right edge, inspector's right edge, JSON payload viewer, and expanded Message History region were inspected at full capture resolution. Each edge now remains visually continuous with its panel background. The tree was scrolled from the selected `device-000` area down to `device-008` through `device-022`, demonstrating that hidden tracks did not disable scrolling.
 
 ## Required fidelity surfaces
 
-- Fonts and typography: the existing Sora/Manrope/Segoe UI stack, weights, sizes, and hierarchy were preserved. No labels wrap unexpectedly in the 293px history panel.
-- Spacing and layout rhythm: desktop history now has a minimum 24% column share; the tree remains dominant and resize handles stay between panels. Expanded Message History uses a bounded 220px/32vh region with internal scrolling.
-- Colors and visual tokens: existing dark navy, teal, blue, line, and muted text tokens are unchanged. The fix introduces no competing surface treatment.
-- Image quality and assets: this screen contains no raster product imagery or custom icon assets. Chart rendering remains sharp and uses the existing Recharts implementation.
-- Copy and content: Start History, Stop History, History, Timeline, Collapse, Focus, Message History, and Retained Editor remain unchanged and accurately describe their actions.
+- Fonts and typography: unchanged. Removing scrollbar gutters gives labels and payload content slightly more horizontal room without changing size, weight, wrapping, or hierarchy.
+- Spacing and layout rhythm: the bright scrollbar widths and the inspector's reserved gutter were removed. Panel boundaries and resizer handles remain visually distinct.
+- Colors and visual tokens: no new colors were introduced. Scroll regions now use the surrounding dark navy surfaces instead of native white macOS/Chromium tracks.
+- Image quality and assets: the working screen has no raster product imagery or custom icon assets. Chart rendering remains sharp and unchanged.
+- Copy and content: no labels, actions, or MQTT data presentation changed.
 
 ## Interaction and accessibility verification
 
-- Clicking Start History on a selected numeric topic changed it to Stop History and immediately opened the History chart in the far-right column.
-- Live numeric points appeared after subsequent MQTT messages.
-- Expanding Message History exposed recorded rows in a scrollable region without covering Current Value or the chart.
-- The 1280px in-app browser check confirmed one grid row and all three panel headers.
-- Browser console check found no application errors. Two existing protobufjs/Vite `fs` externalization warnings remain and are unrelated to this layout.
-- Electron verification retained the live broker-specific path that is unavailable in a normal browser renderer.
+- Electron trackpad scrolling moved the topic tree by more than one viewport while no scrollbar was painted.
+- Topic tree, payload panel, payload viewer, Message History, Timeline, breadcrumb, and connection drawer retain their existing `auto` scrolling behavior.
+- Browser computed styles report `scrollbar-width: none` while `.topic-tree-list` remains `overflow-x: auto; overflow-y: auto` and `.payload-panel` remains `overflow-y: auto`.
+- Keyboard scrolling remains available when a scrollable child or control within it has focus; programmatic scrolling is unaffected.
+- Browser console contained no application errors. The two existing protobufjs/Vite `fs` externalization warnings remain unrelated to this change.
 
 ## Findings and comparison history
 
-1. P1 — History chart moved below the workspace at the normal Electron width.
-   - Fix: lowered the stacked-layout breakpoint from 1400px to 1080px and aligned resizer behavior with the same threshold.
-   - Post-fix evidence: the final Electron and browser screenshots both show a single-row three-panel grid.
-2. P1 — Expanded Message History painted over sibling inspector content.
-   - Fix: gave Current Value a protected minimum track, made the inspector vertically scrollable, and bounded/clipped the open Message History region with its own scrollbar.
-   - Post-fix evidence: Retained Editor appears after the history viewport and no message row paints through it.
-3. P2 — The restored right column initially clipped History header actions.
-   - Fix: raised the history-column minimum from 18% to 24% and tightened/wrapped its header controls.
-   - Post-fix evidence: Timeline, Collapse, and Focus are simultaneously visible at 1280px.
+1. P2 — Native scrollbar tracks visually dominated the dark workspace.
+   - Fix: applied workspace-scoped cross-browser hidden-scrollbar styling using `scrollbar-width: none`, `-ms-overflow-style: none`, and a zero-sized hidden WebKit scrollbar.
+   - Post-fix evidence: the final Electron capture has no visible white tracks or thumbs in any panel.
+2. P2 — The inspector reserved a bright scrollbar gutter even when the thumb was not useful.
+   - Fix: removed `scrollbar-gutter: stable` from the payload panel.
+   - Post-fix evidence: Current Value, Message History, and Retained Editor extend cleanly to the panel edge.
 
 No actionable P0, P1, or P2 issues remain for the requested state.
 
 ## Follow-up polish
 
-- P3: consider a user preference for the default history-column width after more Windows testing at common display scaling levels.
+- P3: if keyboard-only users need a stronger spatial cue later, add a very subtle inset fade at scroll boundaries rather than restoring a persistent track.
