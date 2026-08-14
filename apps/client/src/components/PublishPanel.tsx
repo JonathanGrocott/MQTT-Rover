@@ -118,114 +118,120 @@ export function PublishPanel({
       {collapsed ? (
         <div className="empty-state">Publish panel collapsed.</div>
       ) : (
-      <form className="publish-form" onSubmit={submit}>
-        <label>
-          Topic
-          <input
-            value={effectiveTopic}
-            onChange={(event) => setTopic(event.target.value)}
-            placeholder="devices/line1/temp"
-          />
-        </label>
-        <label>
-          Payload
-          <textarea
-            rows={4}
-            value={payload}
-            onChange={(event) => setPayload(event.target.value)}
-            placeholder='{"value": 42.1}'
-          />
-        </label>
-        <div className="inline publish-controls">
-          <label>
-            QoS
-            <select
-              value={qos}
-              onChange={(event) => setQos(Number(event.target.value) as 0 | 1 | 2)}
+        <form className="publish-form" onSubmit={submit}>
+          <div className="publish-form-body">
+            <label>
+              Topic
+              <input
+                value={effectiveTopic}
+                onChange={(event) => setTopic(event.target.value)}
+                placeholder="devices/line1/temp"
+              />
+            </label>
+            <label>
+              Payload
+              <textarea
+                rows={3}
+                value={payload}
+                onChange={(event) => setPayload(event.target.value)}
+                placeholder='{"value": 42.1}'
+              />
+            </label>
+
+            {mqtt5Enabled && advancedMode ? (
+              <details className="publish-accordion">
+                <summary>Advanced MQTT5 Properties</summary>
+                <div className="publish-mqtt5">
+                  <div className="publish-mqtt5-grid">
+                    <label>
+                      Payload Format
+                      <select
+                        value={payloadFormatIndicator}
+                        onChange={(event) => setPayloadFormatIndicator(event.target.value)}
+                      >
+                        <option value="">unset</option>
+                        <option value="0">0 (binary)</option>
+                        <option value="1">1 (utf-8)</option>
+                      </select>
+                    </label>
+                    <label>
+                      Message Expiry (s)
+                      <input
+                        value={messageExpiry}
+                        onChange={(event) => setMessageExpiry(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Topic Alias
+                      <input
+                        value={topicAlias}
+                        onChange={(event) => setTopicAlias(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Response Topic
+                      <input
+                        value={responseTopic}
+                        onChange={(event) => setResponseTopic(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Correlation Data
+                      <input
+                        value={correlationData}
+                        onChange={(event) => setCorrelationData(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Content Type
+                      <input
+                        value={contentType}
+                        onChange={(event) => setContentType(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <label>
+                    User Props (key=value)
+                    <textarea
+                      rows={2}
+                      value={userPropertiesDraft}
+                      onChange={(event) => setUserPropertiesDraft(event.target.value)}
+                    />
+                  </label>
+                </div>
+              </details>
+            ) : null}
+          </div>
+
+          <div className="publish-action-bar">
+            <label className="publish-qos">
+              <span>QoS</span>
+              <select
+                value={qos}
+                onChange={(event) => setQos(Number(event.target.value) as 0 | 1 | 2)}
+              >
+                <option value={0}>0</option>
+                <option value={1}>1</option>
+                <option value={2}>2</option>
+              </select>
+            </label>
+            <label className="retain-toggle">
+              <input
+                type="checkbox"
+                checked={retain}
+                onChange={(event) => setRetain(event.target.checked)}
+              />
+              Retain
+            </label>
+            <button
+              className="button-primary publish-submit"
+              type="submit"
+              disabled={busy || !effectiveTopic}
             >
-              <option value={0}>0</option>
-              <option value={1}>1</option>
-              <option value={2}>2</option>
-            </select>
-          </label>
-          <label className="retain-toggle">
-            <input
-              type="checkbox"
-              checked={retain}
-              onChange={(event) => setRetain(event.target.checked)}
-            />
-            Retain
-          </label>
-        </div>
-
-        {mqtt5Enabled && advancedMode ? (
-          <details className="publish-accordion">
-            <summary>Advanced MQTT5 Properties</summary>
-            <div className="publish-mqtt5">
-              <div className="publish-mqtt5-grid">
-                <label>
-                  Payload Format
-                  <select
-                    value={payloadFormatIndicator}
-                    onChange={(event) => setPayloadFormatIndicator(event.target.value)}
-                  >
-                    <option value="">unset</option>
-                    <option value="0">0 (binary)</option>
-                    <option value="1">1 (utf-8)</option>
-                  </select>
-                </label>
-                <label>
-                  Message Expiry (s)
-                  <input
-                    value={messageExpiry}
-                    onChange={(event) => setMessageExpiry(event.target.value)}
-                  />
-                </label>
-                <label>
-                  Topic Alias
-                  <input
-                    value={topicAlias}
-                    onChange={(event) => setTopicAlias(event.target.value)}
-                  />
-                </label>
-                <label>
-                  Response Topic
-                  <input
-                    value={responseTopic}
-                    onChange={(event) => setResponseTopic(event.target.value)}
-                  />
-                </label>
-                <label>
-                  Correlation Data
-                  <input
-                    value={correlationData}
-                    onChange={(event) => setCorrelationData(event.target.value)}
-                  />
-                </label>
-                <label>
-                  Content Type
-                  <input
-                    value={contentType}
-                    onChange={(event) => setContentType(event.target.value)}
-                  />
-                </label>
-              </div>
-              <label>
-                User Props (key=value)
-                <textarea
-                  rows={2}
-                  value={userPropertiesDraft}
-                  onChange={(event) => setUserPropertiesDraft(event.target.value)}
-                />
-              </label>
-            </div>
-          </details>
-        ) : null}
-
-        <button className="button-primary" type="submit" disabled={busy || !effectiveTopic}>
-          Publish
-        </button>
-      </form>
+              {busy ? "Publishing…" : "Publish"}
+            </button>
+          </div>
+        </form>
       )}
     </section>
   );

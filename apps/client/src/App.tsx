@@ -1,14 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { OverloadMode } from "@mqtt-rover/protocol";
 import { ConnectionToolbar } from "./components/ConnectionToolbar";
 import { TopicTreePanel } from "./components/TopicTreePanel";
 import { PayloadPanel } from "./components/PayloadPanel";
 import { PublishPanel } from "./components/PublishPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
-import { TimelinePanel } from "./components/TimelinePanel";
+import { HistoryOverlayPanel } from "./components/HistoryOverlayPanel";
+import { WorkspaceHeader } from "./components/WorkspaceHeader";
 import { useConnectionSessionRuntime } from "./hooks/useConnectionSessionRuntime";
 import { useMessageIngestionRuntime, OverloadPreset } from "./hooks/useMessageIngestionRuntime";
-import { useTimelineRuntime } from "./hooks/useTimelineRuntime";
 import { useWorkspaceLayout } from "./hooks/useWorkspaceLayout";
 import { useActiveProfile, useAppStore } from "./store/useAppStore";
 
@@ -67,17 +67,9 @@ export default function App() {
     ingestMessages
   });
 
-  const {
-    timelinePaused,
-    setTimelinePaused,
-    timelineEntries,
-    rightPanelView,
-    setRightPanelView,
-    queueLiveMessage,
-    clearTimeline,
-    resetTimeline,
-    importTimelineSession
-  } = useTimelineRuntime();
+  const [rightPanelView, setRightPanelView] = useState<"history" | "overlay">(
+    "history"
+  );
 
   const {
     subscriptions,
@@ -92,9 +84,7 @@ export default function App() {
     setConnectionState,
     clearRuntimeData,
     resetRuntimeBuffers,
-    resetTimeline,
     syncRuntimeStats,
-    queueLiveMessage,
     enqueueMessage
   });
 
@@ -135,39 +125,39 @@ export default function App() {
     }
     return historyEnabledTopics.has(selectedTopic);
   }, [historyEnabledTopics, selectedTopic]);
+  const enabledHistoryTopics = useMemo(
+    () => Array.from(historyEnabledTopics).sort(),
+    [historyEnabledTopics]
+  );
 
   return (
     <main
-      className={`app-shell ${draggingSplit ? "resizing-y" : ""} ${
+      className={`app-shell ${connectionsCollapsed ? "connections-collapsed" : ""} ${draggingSplit ? "resizing-y" : ""} ${
         draggingColumn !== "none" ? "resizing-x" : ""
       }`}
     >
-      <div className="workspace-strip">
-        <button
-          type="button"
-          className={connectionsCollapsed ? "button-ghost" : "button-primary"}
-          onClick={() => setConnectionsCollapsed((current) => !current)}
-        >
-          {connectionsCollapsed ? "Show Connections" : "Hide Connections"}
-        </button>
-        <button
-          type="button"
-          className={publishCollapsed ? "button-ghost" : "button-primary"}
-          onClick={() => setPublishCollapsed((current) => !current)}
-        >
-          {publishCollapsed ? "Show Publish" : "Hide Publish"}
-        </button>
-        <button
-          type="button"
-          className={historyCollapsed ? "button-ghost" : "button-primary"}
-          onClick={() => setHistoryCollapsed((current) => !current)}
-        >
-          {historyCollapsed ? "Show History/Timeline" : "Hide History/Timeline"}
-        </button>
-        <span className="workspace-strip-note">
-          Prioritize Topic Explorer + Payload Viewer
-        </span>
-      </div>
+      <WorkspaceHeader
+        profileName={profile?.name ?? "No profile"}
+        connectionState={connectionState}
+        runtimeStats={runtimeStats}
+        connectionsOpen={!connectionsCollapsed}
+        publishOpen={!publishCollapsed}
+        historyOpen={!historyCollapsed}
+        onToggleConnections={() => setConnectionsCollapsed((current) => !current)}
+        onTogglePublish={() => setPublishCollapsed((current) => !current)}
+        onToggleHistory={() => {
+          if (historyCollapsed) {
+            setRightPanelView("history");
+            setHistoryCollapsed(false);
+            setFocusPanel("none");
+            return;
+          }
+          setHistoryCollapsed(true);
+          setFocusPanel("none");
+        }}
+        onConnect={connect}
+        onDisconnect={disconnect}
+      />
 
       {!connectionsCollapsed ? (
         <ConnectionToolbar
@@ -227,8 +217,10 @@ export default function App() {
                 toggleHistoryForTopic(selectedTopic);
               }
             }}
-            onPublishRetained={async (topic, payload) => {
-              await publish({ topic, payload, qos: 1, retain: true });
+            onShowHistoryChart={() => {
+              setRightPanelView("history");
+              setHistoryCollapsed(false);
+              setFocusPanel("none");
             }}
           />
 
@@ -292,6 +284,7 @@ export default function App() {
               <HistoryPanel
                 topic={selectedTopic}
                 data={selectedHistory}
+                historyEnabled={selectedHistoryEnabled}
                 collapsed={false}
                 focused={focusPanel === "history"}
                 onToggleCollapsed={() => {
@@ -304,16 +297,16 @@ export default function App() {
                     current === "history" ? "none" : "history"
                   );
                 }}
-                onShowTimeline={() => setRightPanelView("timeline")}
+                onShowTimeline={() => setRightPanelView("overlay")}
               />
             )
             : (
-              <TimelinePanel
-                messages={timelineEntries}
-                advancedMode={viewPreset === "advanced"}
+              <HistoryOverlayPanel
+                enabledTopics={enabledHistoryTopics}
+                historyByTopic={historyByTopic}
+                selectedTopic={selectedTopic}
                 collapsed={false}
                 focused={focusPanel === "history"}
-                paused={timelinePaused}
                 onToggleCollapsed={() => {
                   setHistoryCollapsed(true);
                   setFocusPanel("none");
@@ -324,11 +317,6 @@ export default function App() {
                     current === "history" ? "none" : "history"
                   );
                 }}
-                onTogglePaused={() => {
-                  setTimelinePaused((current) => !current);
-                }}
-                onClear={clearTimeline}
-                onImportSession={importTimelineSession}
                 onShowHistory={() => setRightPanelView("history")}
               />
             )

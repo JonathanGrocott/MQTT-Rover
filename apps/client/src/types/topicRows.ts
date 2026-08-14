@@ -7,8 +7,14 @@ export interface TopicRow {
   hasChildren: boolean;
   childCount: number;
   topicCount: number;
-  messageCount: number;
+  directMessageCount: number;
   expanded: boolean;
+  directActivityAt: number;
+  directPulseAt: number;
+  directBurstCount: number;
+  descendantActivityAt: number;
+  descendantPulseAt: number;
+  descendantBurstCount: number;
 }
 
 export interface AddTopicsRequest {
@@ -29,6 +35,7 @@ export interface ComputeVisibleRequest {
 
 export interface UpdateTopicCountsRequest {
   type: "update-topic-counts";
+  activityMode: import("../lib/topicActivity").TopicActivityMode;
   updates: Array<{
     topic: string;
     deltaMessages: number;

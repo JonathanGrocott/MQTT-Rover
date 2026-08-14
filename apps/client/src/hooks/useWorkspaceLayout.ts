@@ -11,6 +11,10 @@ export type ViewPreset = "simple" | "advanced";
 export type FocusPanel = "none" | "publish" | "history";
 export type DraggingColumn = "none" | "left" | "right";
 
+const MIN_LEFT_COLUMN_RATIO = 0.3;
+const MIN_MIDDLE_COLUMN_RATIO = 0.22;
+const MIN_HISTORY_COLUMN_RATIO = 0.24;
+
 interface WorkspaceLayoutState {
   viewPreset: ViewPreset;
   setViewPreset: Dispatch<SetStateAction<ViewPreset>>;
@@ -72,11 +76,33 @@ export function useWorkspaceLayout(): WorkspaceLayoutState {
   const [viewportWidth, setViewportWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1600
   );
-  const [leftColumnRatio, setLeftColumnRatio] = useState(0.4);
-  const [middleColumnRatio, setMiddleColumnRatio] = useState(0.42);
+  const [leftColumnRatio, setLeftColumnRatio] = useState(() => {
+    if (typeof window === "undefined") return 0.46;
+    const saved = Number(window.localStorage.getItem("mqtt-rover.layout.left-ratio"));
+    return Number.isFinite(saved) && saved >= 0.3 && saved <= 0.7 ? saved : 0.46;
+  });
+  const [middleColumnRatio, setMiddleColumnRatio] = useState(() => {
+    if (typeof window === "undefined") return 0.3;
+    const saved = Number(window.localStorage.getItem("mqtt-rover.layout.middle-ratio"));
+    return Number.isFinite(saved) && saved >= 0.22 && saved <= 0.55 ? saved : 0.3;
+  });
   const [draggingColumn, setDraggingColumn] = useState<DraggingColumn>("none");
   const middleColumnRef = useRef<HTMLDivElement | null>(null);
   const mainGridRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("mqtt-rover.layout.left-ratio", String(leftColumnRatio));
+  }, [leftColumnRatio]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("mqtt-rover.layout.middle-ratio", String(middleColumnRatio));
+  }, [middleColumnRatio]);
 
   useEffect(() => {
     const onResize = () => {
@@ -178,10 +204,6 @@ export function useWorkspaceLayout(): WorkspaceLayoutState {
       return;
     }
 
-    const leftMin = 0.2;
-    const middleMin = 0.22;
-    const rightMin = 0.18;
-
     const onMove = (event: MouseEvent) => {
       const node = mainGridRef.current;
       if (!node) {
@@ -194,10 +216,21 @@ export function useWorkspaceLayout(): WorkspaceLayoutState {
       const xRatio = (event.clientX - bounds.left) / bounds.width;
 
       if (draggingColumn === "left") {
-        let nextLeft = Math.max(leftMin, Math.min(0.7, xRatio));
+        let nextLeft = Math.max(MIN_LEFT_COLUMN_RATIO, Math.min(0.7, xRatio));
+        const currentVisibleLeft = Math.min(
+          leftColumnRatio,
+          1 - MIN_MIDDLE_COLUMN_RATIO - MIN_HISTORY_COLUMN_RATIO
+        );
+        const visibleMiddle = Math.max(
+          MIN_MIDDLE_COLUMN_RATIO,
+          Math.min(
+            middleColumnRatio,
+            1 - currentVisibleLeft - MIN_HISTORY_COLUMN_RATIO
+          )
+        );
         const maxLeft = historyCollapsed
-          ? 1 - middleMin
-          : 1 - middleColumnRatio - rightMin;
+          ? 1 - MIN_MIDDLE_COLUMN_RATIO
+          : 1 - visibleMiddle - MIN_HISTORY_COLUMN_RATIO;
         nextLeft = Math.min(nextLeft, maxLeft);
         setLeftColumnRatio(nextLeft);
       } else if (draggingColumn === "right") {
@@ -205,8 +238,11 @@ export function useWorkspaceLayout(): WorkspaceLayoutState {
           return;
         }
         let nextMiddle = xRatio - leftColumnRatio;
-        const maxMiddle = 1 - leftColumnRatio - rightMin;
-        nextMiddle = Math.max(middleMin, Math.min(maxMiddle, nextMiddle));
+        const maxMiddle = 1 - leftColumnRatio - MIN_HISTORY_COLUMN_RATIO;
+        nextMiddle = Math.max(
+          MIN_MIDDLE_COLUMN_RATIO,
+          Math.min(maxMiddle, nextMiddle)
+        );
         setMiddleColumnRatio(nextMiddle);
       }
     };
@@ -231,13 +267,31 @@ export function useWorkspaceLayout(): WorkspaceLayoutState {
         ? "1fr"
         : `${payloadSplit}fr 10px ${1 - payloadSplit}fr`;
 
-  const showLeftResizer = focusPanel === "none" && viewportWidth > 1400;
+  const showLeftResizer = focusPanel === "none" && viewportWidth > 1080;
   const showRightResizer = showLeftResizer && !historyCollapsed;
-  const rightColumnRatio = Math.max(0.18, 1 - leftColumnRatio - middleColumnRatio);
+  const visibleLeftColumnRatio = historyCollapsed
+    ? leftColumnRatio
+    : Math.min(
+        leftColumnRatio,
+        1 - MIN_MIDDLE_COLUMN_RATIO - MIN_HISTORY_COLUMN_RATIO
+      );
+  const visibleMiddleColumnRatio = historyCollapsed
+    ? middleColumnRatio
+    : Math.max(
+        MIN_MIDDLE_COLUMN_RATIO,
+        Math.min(
+          middleColumnRatio,
+          1 - visibleLeftColumnRatio - MIN_HISTORY_COLUMN_RATIO
+        )
+      );
+  const rightColumnRatio = Math.max(
+    MIN_HISTORY_COLUMN_RATIO,
+    1 - visibleLeftColumnRatio - visibleMiddleColumnRatio
+  );
   const mainGridTemplate = showLeftResizer
     ? historyCollapsed
       ? `${leftColumnRatio}fr 10px ${1 - leftColumnRatio}fr`
-      : `${leftColumnRatio}fr 10px ${middleColumnRatio}fr 10px ${rightColumnRatio}fr`
+      : `${visibleLeftColumnRatio}fr 10px ${visibleMiddleColumnRatio}fr 10px ${rightColumnRatio}fr`
     : undefined;
 
   return {

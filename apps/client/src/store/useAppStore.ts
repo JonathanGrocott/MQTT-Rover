@@ -7,6 +7,8 @@ import {
   SubscriptionRequest,
   tryExtractNumericValue
 } from "@mqtt-rover/protocol";
+import { getElectronBridge } from "../desktop/electronBridge";
+import { TopicActivityMode } from "../lib/topicActivity";
 
 export interface TopicTreeNode {
   name: string;
@@ -51,6 +53,7 @@ interface PersistedSlice {
   activeProfileId: string | null;
   expandedPaths: string[];
   historyEnabledTopics: string[];
+  topicActivityMode?: TopicActivityMode;
 }
 
 interface AppState {
@@ -71,6 +74,7 @@ interface AppState {
   pendingNewTopics: string[];
   pendingTopicCountDeltas: TopicCountDelta[];
   topicStatsRevision: number;
+  topicActivityMode: TopicActivityMode;
   setConnectionState: (state: ConnectionState, error?: string | null) => void;
   setSearchTerm: (value: string) => void;
   setSelectedTopic: (topic: string | null) => void;
@@ -78,6 +82,7 @@ interface AppState {
   upsertProfile: (profile: ConnectionProfile) => void;
   createProfile: () => void;
   removeActiveProfile: () => void;
+  clearProfileSecrets: (profileIds: string[]) => void;
   setActiveProfile: (id: string) => void;
   updateActiveProfile: (patch: Partial<ConnectionProfile>) => void;
   ingestMessages: (messages: MessageEnvelope[]) => void;
@@ -85,6 +90,7 @@ interface AppState {
   drainPendingTopicCountDeltas: () => TopicCountDelta[];
   clearRuntimeData: () => void;
   toggleHistoryForTopic: (topic: string) => void;
+  setTopicActivityMode: (mode: TopicActivityMode) => void;
 }
 
 const defaultProfile = (): ConnectionProfile => ({
@@ -214,6 +220,7 @@ export const useAppStore = create<AppState>()(
       pendingNewTopics: [],
       pendingTopicCountDeltas: [],
       topicStatsRevision: 0,
+      topicActivityMode: "subtle",
 
       setConnectionState: (state, error = null) => {
         set({ connectionState: state, connectionError: error });
@@ -266,6 +273,10 @@ export const useAppStore = create<AppState>()(
           return;
         }
 
+        void getElectronBridge()?.deleteSecrets(activeId).catch((error) => {
+          console.error("Failed to remove stored profile credentials", error);
+        });
+
         const nextProfiles = get().profiles.filter(
           (profile) => profile.id !== activeId
         );
@@ -277,6 +288,18 @@ export const useAppStore = create<AppState>()(
         }
 
         set({ profiles: nextProfiles, activeProfileId: nextProfiles[0]?.id ?? null });
+      },
+
+      clearProfileSecrets: (profileIds) => {
+        const ids = new Set(profileIds);
+        if (ids.size === 0) {
+          return;
+        }
+        set({
+          profiles: get().profiles.map((profile) =>
+            ids.has(profile.id) ? profileWithoutPersistedSecrets(profile) : profile
+          )
+        });
       },
 
       setActiveProfile: (id) => {
@@ -305,6 +328,7 @@ export const useAppStore = create<AppState>()(
 
         const topics = new Map(get().topics);
         const historyByTopic = new Map(get().historyByTopic);
+        const updatedHistorySeries = new Map<string, HistoryPoint[]>();
         const messageHistoryByTopic = new Map(get().messageHistoryByTopic);
         const enabledHistory = get().historyEnabledTopics;
         const newTopics: string[] = [];
@@ -331,33 +355,34 @@ export const useAppStore = create<AppState>()(
           }
           deltaByTopic.set(message.topic, (deltaByTopic.get(message.topic) ?? 0) + 1);
 
-          const nextRecord: TopicMessageRecord = {
-            sequence: ++messageSequence,
-            topic: message.topic,
-            payload: new Uint8Array(message.payload),
-            qos: message.qos,
-            retain: message.retain,
-            timestamp: message.timestamp,
-            mqtt5: message.mqtt5
-          };
-          const currentHistory = messageHistoryByTopic.get(message.topic) ?? [];
-          const nextHistory =
-            currentHistory.length >= MESSAGE_HISTORY_LIMIT
-              ? [
-                  ...currentHistory.slice(
-                    currentHistory.length - MESSAGE_HISTORY_LIMIT + 1
-                  ),
-                  nextRecord
-                ]
-              : [...currentHistory, nextRecord];
-          messageHistoryByTopic.set(message.topic, nextHistory);
-
           if (enabledHistory.has(message.topic)) {
+            const nextRecord: TopicMessageRecord = {
+              sequence: ++messageSequence,
+              topic: message.topic,
+              payload: new Uint8Array(message.payload),
+              qos: message.qos,
+              retain: message.retain,
+              timestamp: message.timestamp,
+              mqtt5: message.mqtt5
+            };
+            const currentHistory = messageHistoryByTopic.get(message.topic) ?? [];
+            const nextHistory =
+              currentHistory.length >= MESSAGE_HISTORY_LIMIT
+                ? [
+                    ...currentHistory.slice(
+                      currentHistory.length - MESSAGE_HISTORY_LIMIT + 1
+                    ),
+                    nextRecord
+                  ]
+                : [...currentHistory, nextRecord];
+            messageHistoryByTopic.set(message.topic, nextHistory);
+
             const numeric = tryExtractNumericValue(message.payload);
             if (numeric !== null) {
-              let series = historyByTopic.get(message.topic);
+              let series = updatedHistorySeries.get(message.topic);
               if (!series) {
-                series = [];
+                series = [...(historyByTopic.get(message.topic) ?? [])];
+                updatedHistorySeries.set(message.topic, series);
                 historyByTopic.set(message.topic, series);
               }
               series.push({ timestamp: message.timestamp, value: numeric });
@@ -430,11 +455,25 @@ export const useAppStore = create<AppState>()(
         const enabled = new Set(get().historyEnabledTopics);
         if (enabled.has(topic)) {
           enabled.delete(topic);
+          const historyByTopic = new Map(get().historyByTopic);
+          const messageHistoryByTopic = new Map(get().messageHistoryByTopic);
+          historyByTopic.delete(topic);
+          messageHistoryByTopic.delete(topic);
+          set({
+            historyEnabledTopics: enabled,
+            historyByTopic,
+            messageHistoryByTopic
+          });
+          return;
         } else {
           enabled.add(topic);
         }
 
         set({ historyEnabledTopics: enabled });
+      },
+
+      setTopicActivityMode: (mode) => {
+        set({ topicActivityMode: mode });
       }
     }),
     {
@@ -443,7 +482,8 @@ export const useAppStore = create<AppState>()(
         profiles: state.profiles.map(profileWithoutPersistedSecrets),
         activeProfileId: state.activeProfileId,
         expandedPaths: Array.from(state.expandedPaths),
-        historyEnabledTopics: Array.from(state.historyEnabledTopics)
+        historyEnabledTopics: Array.from(state.historyEnabledTopics),
+        topicActivityMode: state.topicActivityMode
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as PersistedSlice;
@@ -453,7 +493,12 @@ export const useAppStore = create<AppState>()(
           ...persisted,
           profiles: persistedProfiles.length > 0 ? persistedProfiles : currentState.profiles,
           expandedPaths: new Set(persisted.expandedPaths ?? []),
-          historyEnabledTopics: new Set(persisted.historyEnabledTopics ?? [])
+          historyEnabledTopics: new Set(persisted.historyEnabledTopics ?? []),
+          topicActivityMode:
+            persisted.topicActivityMode === "off" ||
+            persisted.topicActivityMode === "full"
+              ? persisted.topicActivityMode
+              : "subtle"
         } satisfies AppState;
       }
     }

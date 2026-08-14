@@ -14,11 +14,10 @@ interface Props {
   messageHistory: TopicMessageRecord[];
   historyEnabled: boolean;
   onToggleHistory: () => void;
-  onPublishRetained: (topic: string, payload: string) => Promise<void>;
+  onShowHistoryChart: () => void;
 }
 
 type PayloadView = "json" | "utf8" | "hex" | "sparkplug" | "mqtt5";
-type CompareMode = "raw" | "diff";
 
 function payloadHistoryPreview(bytes: Uint8Array): string {
   if (bytes.byteLength === 0) {
@@ -60,55 +59,17 @@ function formatPayloadView(
   }
 }
 
-function diffPayloads(previous: string, current: string): string {
-  if (previous === current) {
-    return "No differences detected.";
-  }
-
-  const previousLines = previous.split("\n");
-  const currentLines = current.split("\n");
-  const maxLines = Math.max(previousLines.length, currentLines.length);
-  const output: string[] = [];
-
-  for (let index = 0; index < maxLines; index += 1) {
-    const left = previousLines[index];
-    const right = currentLines[index];
-    if (left === right) {
-      output.push(`  ${left ?? ""}`);
-      continue;
-    }
-    if (left !== undefined) {
-      output.push(`- ${left}`);
-    }
-    if (right !== undefined) {
-      output.push(`+ ${right}`);
-    }
-  }
-
-  return output.join("\n");
-}
-
 export function PayloadPanel({
   topic,
   snapshot,
   messageHistory,
   historyEnabled,
   onToggleHistory,
-  onPublishRetained
+  onShowHistoryChart
 }: Props) {
-  const [retainedDraft, setRetainedDraft] = useState("");
-  const [busy, setBusy] = useState(false);
   const [activeView, setActiveView] = useState<PayloadView>("json");
-  const [compareMode, setCompareMode] = useState<CompareMode>("raw");
-  const [compareSequence, setCompareSequence] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!snapshot) {
-      setRetainedDraft("");
-      return;
-    }
-    setRetainedDraft(bytesToUtf8(snapshot.payload));
-  }, [snapshot]);
+  const [viewedSequence, setViewedSequence] = useState<number | null>(null);
+  const [topicCopied, setTopicCopied] = useState(false);
 
   useEffect(() => {
     setActiveView((current) => {
@@ -123,24 +84,23 @@ export function PayloadPanel({
   }, [topic, snapshot]);
 
   useEffect(() => {
-    setCompareSequence(null);
-    setCompareMode("raw");
+    setViewedSequence(null);
   }, [topic]);
 
   useEffect(() => {
     if (
-      compareSequence !== null &&
-      !messageHistory.some((entry) => entry.sequence === compareSequence)
+      viewedSequence !== null &&
+      !messageHistory.some((entry) => entry.sequence === viewedSequence)
     ) {
-      setCompareSequence(null);
+      setViewedSequence(null);
     }
-  }, [compareSequence, messageHistory]);
+  }, [messageHistory, viewedSequence]);
 
   if (!topic || !snapshot) {
     return (
       <section className="panel payload-panel">
         <header className="panel-header">
-          <h2>Payload Viewer</h2>
+          <h2>Topic Inspector</h2>
         </header>
         <div className="empty-state">Select a topic to inspect payload and history.</div>
       </section>
@@ -148,213 +108,154 @@ export function PayloadPanel({
   }
 
   const currentRecord = messageHistory[messageHistory.length - 1] ?? null;
-  const previousRecord =
-    messageHistory.length > 1 ? messageHistory[messageHistory.length - 2] : null;
-  const chosenRecord =
-    compareSequence !== null
-      ? messageHistory.find((entry) => entry.sequence === compareSequence) ?? null
-      : previousRecord;
-  const compareRecord =
-    chosenRecord && currentRecord && chosenRecord.sequence !== currentRecord.sequence
-      ? chosenRecord
+  const viewedRecord =
+    viewedSequence !== null
+      ? messageHistory.find((entry) => entry.sequence === viewedSequence) ?? null
       : null;
-
-  const compareOptions =
-    messageHistory.length > 1
-      ? [...messageHistory.slice(0, messageHistory.length - 1)].reverse()
-      : [];
   const recentHistory = [...messageHistory].slice(-80).reverse();
 
-  const currentViewContent = formatPayloadView(
+  const viewerContent = formatPayloadView(
     activeView,
     topic,
-    snapshot.payload,
-    snapshot.mqtt5
+    viewedRecord?.payload ?? snapshot.payload,
+    viewedRecord?.mqtt5 ?? snapshot.mqtt5
   );
-  const compareViewContent = compareRecord
-    ? formatPayloadView(
-        activeView,
-        topic,
-        compareRecord.payload,
-        compareRecord.mqtt5
-      )
-    : "";
-  const viewerContent =
-    compareMode === "diff"
-      ? compareRecord
-        ? diffPayloads(compareViewContent, currentViewContent)
-        : "At least two messages are required to compute a diff."
-      : currentViewContent;
+  const topicSegments = topic.split("/");
 
   return (
     <section className="panel payload-panel">
       <header className="panel-header">
-        <h2>Payload Viewer</h2>
+        <h2>Topic Inspector</h2>
         <div className="inline">
-          <button type="button" className="button-ghost" onClick={onToggleHistory}>
-            {historyEnabled ? "Stop History" : "Start History"}
-          </button>
+          {historyEnabled ? (
+            <>
+              <button
+                type="button"
+                className="button-primary"
+                onClick={onShowHistoryChart}
+              >
+                View Chart
+              </button>
+              <button type="button" className="button-ghost" onClick={onToggleHistory}>
+                Stop History
+              </button>
+            </>
+          ) : (
+            <button type="button" className="button-primary" onClick={onToggleHistory}>
+              Start History
+            </button>
+          )}
         </div>
       </header>
 
-      <div className="payload-meta">
-        <span>
-          <strong>Topic:</strong> {topic}
-        </span>
-        <span>
-          <strong>QoS:</strong> {snapshot.qos}
-        </span>
-        <span>
-          <strong>Retain:</strong> {snapshot.retain ? "Yes" : "No"}
-        </span>
-        <span>
-          <strong>Timestamp:</strong> {new Date(snapshot.timestamp).toLocaleTimeString()}
-        </span>
-      </div>
-
-      <div className="payload-view-switcher">
-        <button
-          type="button"
-          className={activeView === "json" ? "button-primary" : "button-ghost"}
-          onClick={() => setActiveView("json")}
-        >
-          JSON
-        </button>
-        <button
-          type="button"
-          className={activeView === "utf8" ? "button-primary" : "button-ghost"}
-          onClick={() => setActiveView("utf8")}
-        >
-          UTF-8
-        </button>
-        <button
-          type="button"
-          className={activeView === "hex" ? "button-primary" : "button-ghost"}
-          onClick={() => setActiveView("hex")}
-        >
-          HEX
-        </button>
-        <button
-          type="button"
-          className={activeView === "sparkplug" ? "button-primary" : "button-ghost"}
-          onClick={() => setActiveView("sparkplug")}
-        >
-          Sparkplug
-        </button>
-        <button
-          type="button"
-          className={activeView === "mqtt5" ? "button-primary" : "button-ghost"}
-          onClick={() => setActiveView("mqtt5")}
-        >
-          MQTT5
-        </button>
-      </div>
-
-      <div className="payload-compare-controls">
-        <span className="payload-compare-label">Compare</span>
-        <button
-          type="button"
-          className={compareMode === "raw" ? "button-primary" : "button-ghost"}
-          onClick={() => setCompareMode("raw")}
-        >
-          Raw
-        </button>
-        <button
-          type="button"
-          className={compareMode === "diff" ? "button-primary" : "button-ghost"}
-          onClick={() => setCompareMode("diff")}
-        >
-          Diff
-        </button>
-        <select
-          value={compareSequence ?? ""}
-          onChange={(event) =>
-            setCompareSequence(
-              event.target.value ? Number(event.target.value) : null
-            )
-          }
-          disabled={compareOptions.length === 0}
-        >
-          <option value="">Previous message</option>
-          {compareOptions.map((entry) => (
-            <option key={entry.sequence} value={entry.sequence}>
-              {new Date(entry.timestamp).toLocaleTimeString()} qos{entry.qos}
-              {entry.retain ? " retain" : ""}
-            </option>
+      <div className="topic-summary">
+        <div className="topic-breadcrumb" aria-label={`Selected topic: ${topic}`}>
+          {topicSegments.map((segment, index) => (
+            <span className="topic-breadcrumb-part" key={`${segment}-${index}`}>
+              {index > 0 ? <span className="topic-breadcrumb-separator">/</span> : null}
+              <span className="topic-breadcrumb-chip">{segment || "(empty)"}</span>
+            </span>
           ))}
-        </select>
-      </div>
-
-      <div className="payload-viewer">
-        <pre>{viewerContent}</pre>
-      </div>
-
-      <details className="payload-history">
-        <summary>Message History ({messageHistory.length})</summary>
-        <div className="payload-history-list">
-          {recentHistory.length === 0 ? (
-            <div className="payload-history-empty">No messages recorded yet.</div>
-          ) : (
-            recentHistory.map((entry) => {
-              const isCurrent = currentRecord?.sequence === entry.sequence;
-              const isCompared = compareRecord?.sequence === entry.sequence;
-              return (
-                <button
-                  key={entry.sequence}
-                  type="button"
-                  className={`payload-history-row ${
-                    isCurrent ? "current" : ""
-                  } ${isCompared ? "compare" : ""}`}
-                  onClick={() =>
-                    setCompareSequence(isCurrent ? null : entry.sequence)
-                  }
-                >
-                  <span className="payload-history-time">
-                    {new Date(entry.timestamp).toLocaleTimeString()}
-                  </span>
-                  <span className="payload-history-flags">
-                    qos{entry.qos} {entry.retain ? "retain" : "live"}
-                  </span>
-                  <span className="payload-history-preview">
-                    {payloadHistoryPreview(entry.payload)}
-                  </span>
-                  {isCurrent ? (
-                    <span className="payload-history-chip">current</span>
-                  ) : isCompared ? (
-                    <span className="payload-history-chip">compare</span>
-                  ) : null}
-                </button>
-              );
-            })
-          )}
         </div>
-      </details>
-
-      <details className="retained-editor">
-        <summary>Retained Editor</summary>
-        <div className="retained-editor-body">
-          <textarea
-            rows={5}
-            value={retainedDraft}
-            onChange={(event) => setRetainedDraft(event.target.value)}
-          />
+        <div className="payload-meta">
+          <span>QoS {snapshot.qos}</span>
+          <span>{snapshot.retain ? "Retained" : "Live"}</span>
+          <span>{new Date(snapshot.timestamp).toLocaleTimeString()}</span>
           <button
-            className="button-primary"
             type="button"
-            disabled={busy}
+            className="topic-copy-button"
             onClick={async () => {
-              setBusy(true);
-              try {
-                await onPublishRetained(topic, retainedDraft);
-              } finally {
-                setBusy(false);
-              }
+              await navigator.clipboard.writeText(topic);
+              setTopicCopied(true);
+              window.setTimeout(() => setTopicCopied(false), 1_500);
             }}
           >
-            Publish Retained to Selected Topic
+            {topicCopied ? "Copied" : "Copy topic"}
           </button>
         </div>
-      </details>
+      </div>
+
+      <section className="inspector-section current-value-section">
+        <header className="inspector-section-header">
+          <h3>{viewedRecord ? "Historical value" : "Current value"}</h3>
+          <div className="payload-view-actions">
+            {viewedRecord ? (
+              <button
+                type="button"
+                className="button-ghost payload-live-button"
+                onClick={() => setViewedSequence(null)}
+              >
+                Return to live
+              </button>
+            ) : null}
+            <div className="payload-view-switcher">
+              {(["json", "utf8", "hex", "sparkplug", "mqtt5"] as PayloadView[]).map(
+                (view) => (
+                  <button
+                    type="button"
+                    key={view}
+                    className={activeView === view ? "button-primary" : "button-ghost"}
+                    onClick={() => setActiveView(view)}
+                  >
+                    {view === "utf8"
+                      ? "UTF-8"
+                      : view === "mqtt5"
+                        ? "MQTT5"
+                        : view[0].toUpperCase() + view.slice(1)}
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+        </header>
+
+        <div className="payload-viewer">
+          <pre>{viewerContent}</pre>
+        </div>
+      </section>
+
+      {historyEnabled ? (
+        <details className="payload-history">
+          <summary>Message History ({messageHistory.length})</summary>
+          <div className="payload-history-list">
+            {recentHistory.length === 0 ? (
+              <div className="payload-history-empty">No messages recorded yet.</div>
+            ) : (
+              recentHistory.map((entry) => {
+                const isCurrent = currentRecord?.sequence === entry.sequence;
+                const isViewed = viewedRecord?.sequence === entry.sequence;
+                return (
+                  <button
+                    key={entry.sequence}
+                    type="button"
+                    className={`payload-history-row ${
+                      isCurrent ? "current" : ""
+                    } ${isViewed ? "viewing" : ""}`}
+                    onClick={() =>
+                      setViewedSequence(isCurrent ? null : entry.sequence)
+                    }
+                  >
+                    <span className="payload-history-time">
+                      {new Date(entry.timestamp).toLocaleTimeString()}
+                    </span>
+                    <span className="payload-history-flags">
+                      qos{entry.qos} {entry.retain ? "retain" : "live"}
+                    </span>
+                    <span className="payload-history-preview">
+                      {payloadHistoryPreview(entry.payload)}
+                    </span>
+                    {isCurrent ? (
+                      <span className="payload-history-chip">current</span>
+                    ) : isViewed ? (
+                      <span className="payload-history-chip">viewing</span>
+                    ) : null}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </details>
+      ) : null}
     </section>
   );
 }

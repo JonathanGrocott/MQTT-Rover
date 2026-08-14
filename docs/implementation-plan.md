@@ -35,6 +35,7 @@
 - [x] OS-encrypted desktop credential storage
 - [x] Connection-time subscription filter controls + wildcard presets
 - [x] Topic tree usability pass: inline payload previews + recent-message highlight
+- [x] Scale-aware topic activity modes with throttled pulses and reduced-motion support
 - [x] Workspace usability pass: collapsible and focusable publish/history panels
 
 ### M2
@@ -65,4 +66,4 @@
 - [ ] Configure company Electron binary mirror/cache in internal CI
 - [ ] Configure macOS and Windows signing credentials
 - [x] Remove Tauri runtime and npm dependencies from the active build
-- [ ] Remove the transitional Tauri source after packaged Windows parity
+- [x] Remove the transitional Tauri implementation after packaged Windows parity

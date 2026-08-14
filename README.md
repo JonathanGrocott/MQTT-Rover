@@ -8,9 +8,8 @@ Current milestone implements:
 - Runtime subscription manager (add/remove topic filters with QoS)
 - Topic tree explorer with worker-based indexing + virtualized rendering
 - Live payload viewer (UTF-8, JSON, HEX)
-- Timeline workflow panel (pause, filter, diff A/B payloads, export JSONL)
-- Timeline bookmarks + advanced filter drawer (payload/QoS/retain/MQTT5/regex)
-- Timeline session import + replay from JSONL/NDJSON exports
+- Multi-topic history overlay for charting selected opt-in histories together
+- JSONL export for selected numeric history series
 - Sparkplug B decode (payload decode-only)
 - Publish panel (QoS + retain + MQTT5 publish properties inspector)
 - Clean-by-default controls with collapsible advanced sections/toolbars
@@ -19,7 +18,7 @@ Current milestone implements:
 - Opt-in per-topic history capture with charting
 - Runtime backpressure telemetry chips (msg/s, queue depth, coalescing, flush cost, drops)
 - Adaptive overload controls with hard queue caps by mode (`balanced`, `history-priority`, `latest-only`)
-- Tree UX upgrades: inline endpoint payload previews, per-topic message counters, and recent-message highlight
+- Tree UX upgrades: inline endpoint payload previews, per-topic message counters, and scalable Off/Subtle/Full activity indications
 - Workspace usability controls: collapsible connections/publish/history panels and focus mode for publish/history
 
 ## Stack
@@ -57,6 +56,11 @@ npm run build
 npm run electron:dev
 ```
 
+To exercise the desktop client against a disposable, busy local broker, see
+[Local MQTT load testing](docs/load-testing.md). The included simulator can populate up to the
+100,000-topic design target and sustain a configurable message rate without using shared public
+broker capacity.
+
 ## Desktop Status
 Desktop implementation lives under `apps/client/electron`:
 - Broker sockets run in Electron's main process; the renderer has no Node.js access
@@ -71,8 +75,7 @@ Notes:
 - Electron requires its platform binary to be available through npm's download path, an internal
   `ELECTRON_MIRROR`, or a pre-populated cache.
 - CI runs web checks plus packaged Electron builds on macOS and Windows.
-- The previous Tauri source remains temporarily under `apps/client/src-tauri` for migration comparison
-  and will be removed after packaged-app connection parity is verified.
+- The active desktop build is npm-only and does not require Rust, Cargo, or crates.io.
 
 ## Package (Desktop)
 ```bash

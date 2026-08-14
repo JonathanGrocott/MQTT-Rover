@@ -10,6 +10,8 @@ import { ManagedSubscription } from "../components/connection-toolbar/types";
 import { errorMessage } from "../lib/errors";
 import { mqttRuntime } from "../lib/mqttRuntime";
 import { resolveInitialSubscriptions } from "../lib/subscriptions";
+import { getElectronBridge } from "../desktop/electronBridge";
+import { useAppStore } from "../store/useAppStore";
 
 interface Args {
   profile: ConnectionProfile | null;
@@ -20,9 +22,7 @@ interface Args {
   ) => void;
   clearRuntimeData: () => void;
   resetRuntimeBuffers: () => void;
-  resetTimeline: () => void;
   syncRuntimeStats: () => void;
-  queueLiveMessage: (message: MessageEnvelope) => void;
   enqueueMessage: (message: MessageEnvelope) => void;
 }
 
@@ -32,9 +32,7 @@ export function useConnectionSessionRuntime({
   setConnectionState,
   clearRuntimeData,
   resetRuntimeBuffers,
-  resetTimeline,
   syncRuntimeStats,
-  queueLiveMessage,
   enqueueMessage
 }: Args) {
   const [subscriptions, setSubscriptions] = useState<ManagedSubscription[]>([]);
@@ -51,7 +49,6 @@ export function useConnectionSessionRuntime({
     }
 
     resetRuntimeBuffers();
-    resetTimeline();
     syncRuntimeStats();
 
     clearRuntimeData();
@@ -66,11 +63,14 @@ export function useConnectionSessionRuntime({
       };
       await mqttRuntime.connect(connectProfile, {
         onMessage: (message) => {
-          queueLiveMessage(message);
           enqueueMessage(message);
         },
         onState: (state) => {
-          setConnectionState(state);
+          const current = useAppStore.getState();
+          setConnectionState(
+            state,
+            state === "disconnected" ? current.connectionError : null
+          );
           if (state === "connected") {
             setSubscriptions(
               connectProfile.initialSubscriptions.map((entry) => ({
@@ -83,9 +83,16 @@ export function useConnectionSessionRuntime({
           }
         },
         onError: (message) => {
-          setConnectionState("error", message);
+          const currentState = useAppStore.getState().connectionState;
+          setConnectionState(
+            currentState === "connected" ? "error" : "disconnected",
+            message
+          );
         }
       });
+      if (getElectronBridge()) {
+        useAppStore.getState().clearProfileSecrets([connectProfile.id]);
+      }
     } catch (error) {
       const message = errorMessage(error);
       setConnectionState("error", message);
@@ -94,9 +101,7 @@ export function useConnectionSessionRuntime({
     clearRuntimeData,
     enqueueMessage,
     profile,
-    queueLiveMessage,
     resetRuntimeBuffers,
-    resetTimeline,
     setConnectionState,
     syncRuntimeStats
   ]);
@@ -104,13 +109,11 @@ export function useConnectionSessionRuntime({
   const disconnect = useCallback(async () => {
     await mqttRuntime.disconnect();
     resetRuntimeBuffers();
-    resetTimeline();
     syncRuntimeStats();
     setConnectionState("disconnected");
     setSubscriptions([]);
   }, [
     resetRuntimeBuffers,
-    resetTimeline,
     setConnectionState,
     syncRuntimeStats
   ]);
