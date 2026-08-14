@@ -14,7 +14,6 @@ interface Props {
   messageHistory: TopicMessageRecord[];
   historyEnabled: boolean;
   onToggleHistory: () => void;
-  onPublishRetained: (topic: string, payload: string) => Promise<void>;
 }
 
 type PayloadView = "json" | "utf8" | "hex" | "sparkplug" | "mqtt5";
@@ -64,22 +63,11 @@ export function PayloadPanel({
   snapshot,
   messageHistory,
   historyEnabled,
-  onToggleHistory,
-  onPublishRetained
+  onToggleHistory
 }: Props) {
-  const [retainedDraft, setRetainedDraft] = useState("");
-  const [busy, setBusy] = useState(false);
   const [activeView, setActiveView] = useState<PayloadView>("json");
   const [viewedSequence, setViewedSequence] = useState<number | null>(null);
   const [topicCopied, setTopicCopied] = useState(false);
-
-  useEffect(() => {
-    if (!snapshot) {
-      setRetainedDraft("");
-      return;
-    }
-    setRetainedDraft(bytesToUtf8(snapshot.payload));
-  }, [snapshot]);
 
   useEffect(() => {
     setActiveView((current) => {
@@ -251,32 +239,6 @@ export function PayloadPanel({
           </div>
         </details>
       ) : null}
-
-      <details className="retained-editor">
-        <summary>Retained Editor</summary>
-        <div className="retained-editor-body">
-          <textarea
-            rows={5}
-            value={retainedDraft}
-            onChange={(event) => setRetainedDraft(event.target.value)}
-          />
-          <button
-            className="button-primary"
-            type="button"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await onPublishRetained(topic, retainedDraft);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Publish Retained to Selected Topic
-          </button>
-        </div>
-      </details>
     </section>
   );
 }

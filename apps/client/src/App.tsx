@@ -217,9 +217,6 @@ export default function App() {
                 toggleHistoryForTopic(selectedTopic);
               }
             }}
-            onPublishRetained={async (topic, payload) => {
-              await publish({ topic, payload, qos: 1, retain: true });
-            }}
           />
 
           {focusPanel === "none" && !publishCollapsed ? (

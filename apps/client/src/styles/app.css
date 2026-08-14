@@ -887,7 +887,7 @@ button:disabled {
 
 .payload-panel {
   display: grid;
-  grid-template-rows: auto auto minmax(220px, 1fr) auto auto;
+  grid-template-rows: auto auto minmax(220px, 1fr) auto;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1107,30 +1107,6 @@ button:disabled {
   font-size: 10px;
   text-transform: uppercase;
   color: var(--muted);
-}
-
-.retained-editor {
-  border-top: 1px solid var(--line);
-}
-
-.retained-editor > summary {
-  list-style: none;
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 6px 10px;
-}
-
-.retained-editor > summary::-webkit-details-marker {
-  display: none;
-}
-
-.retained-editor-body {
-  padding: 0 12px 12px;
-  display: grid;
-  gap: 8px;
 }
 
 .publish-form {
