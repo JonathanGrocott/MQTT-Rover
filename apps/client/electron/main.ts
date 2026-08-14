@@ -11,6 +11,7 @@ import { CredentialStore } from "./credentialStore";
 import { MqttSessionManager } from "./mqttSessionManager";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const appIconPath = path.join(currentDirectory, "../assets/icon.png");
 let mainWindow: BrowserWindow | null = null;
 let sessionManager: MqttSessionManager | null = null;
 
@@ -78,6 +79,7 @@ function createWindow(): void {
     height: 980,
     minWidth: 960,
     minHeight: 640,
+    icon: appIconPath,
     show: false,
     webPreferences: {
       preload: path.join(currentDirectory, "preload.cjs"),
@@ -187,6 +189,9 @@ function registerIpcHandlers(): void {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === "darwin") {
+    app.dock?.setIcon(appIconPath);
+  }
   session.defaultSession.setPermissionCheckHandler(() => false);
   session.defaultSession.setPermissionRequestHandler(
     (_webContents, _permission, callback) => callback(false)
