@@ -1,52 +1,51 @@
-# Hidden scrollbar treatment design QA
+# Compact controls design QA
 
 final result: passed
 
 ## Comparison target
 
-- Source visual truth: user-provided conversation attachment `Electron Appshot 2026-08-13T23-59-54.609Z.png`, showing bright native scrollbar tracks in the topic tree, inspector, payload viewer, and Message History. The conversation-owned attachment has no exposed local filesystem path.
-- Final Electron screenshot: `/Users/jg/.codex/visualizations/2026/08/13/019ffc1d-c24e-77d0-a229-8e737a345645/mqtt-ui-audit/09-hidden-scrollbars-electron.jpeg`.
-- Browser verification screenshot: `/Users/jg/.codex/visualizations/2026/08/13/019ffc1d-c24e-77d0-a229-8e737a345645/mqtt-ui-audit/10-hidden-scrollbars-browser.png`.
-- Source attachment pixels: 1692 × 768. The source is approximately a 1.322× representation of the 1280 × 581 Electron CSS window, so the final Electron capture was compared after accounting for that density difference.
-- Final Electron pixels: 1280 × 581.
+- Source visual truth: `/Users/jg/.codex/visualizations/2026/08/13/019ffc1d-c24e-77d0-a229-8e737a345645/mqtt-ui-audit/09-hidden-scrollbars-electron.jpeg`, the live Electron workspace before the compact-control pass.
+- Final Electron screenshot: `/Users/jg/.codex/visualizations/2026/08/13/019ffc1d-c24e-77d0-a229-8e737a345645/mqtt-ui-audit/11-compact-controls-electron.png`.
+- Browser verification screenshot: `/Users/jg/.codex/visualizations/2026/08/13/019ffc1d-c24e-77d0-a229-8e737a345645/mqtt-ui-audit/12-compact-controls-browser.png`.
+- Source and final Electron pixels: 1280 × 581 at the same 1× CSS window size. No density normalization was required.
 - Browser viewport and pixels: 1280 × 720 at 1× density.
-- State: connected to the 25,000-topic load test at approximately 2,000 messages/sec, history chart active, Message History expanded, and topic tree scrolled away from its initial position.
+- State: local Mosquitto connected in Electron with the 25,000-topic load test at about 2,000 messages/sec, a selected leaf topic, retained payload display, Message History recording, and the right-side chart visible. The browser fallback state is disconnected because native MQTT transport is Electron-only.
 
 ## Full-view comparison evidence
 
-The source attachment and final Electron screenshot were reviewed together in this implementation turn. The source contains four highly visible white native scrollbar tracks that interrupt the dark panel surfaces. The final capture preserves the same three-column layout and content density while removing all painted tracks, thumbs, and reserved scrollbar gutters.
+The before and after Electron captures were opened together at the same viewport. The source showed Raw and Diff substantially taller and heavier than Json, UTF-8, Hex, Sparkplug, and MQTT5. In the final capture, all of those mode controls share the same compact height, font scale, padding, radius, and visual weight. Panel headers are six pixels shorter, while the three-column information architecture and resizable workspace proportions remain unchanged.
 
 ## Focused-region comparison evidence
 
-The tree's right edge, inspector's right edge, JSON payload viewer, and expanded Message History region were inspected at full capture resolution. Each edge now remains visually continuous with its panel background. The tree was scrolled from the selected `device-000` area down to `device-008` through `device-022`, demonstrating that hidden tracks did not disable scrolling.
+The Current Value format switcher, Compare row, Topic Inspector header, History header, Timeline controls, and Connections overlay were inspected in the live Electron application. Raw and Diff now visually match Json and Hex. The Connections overlay fits its primary profile fields, runtime subscriptions bar, and live connection telemetry into a shorter vertical footprint without clipping labels or controls.
 
 ## Required fidelity surfaces
 
-- Fonts and typography: unchanged. Removing scrollbar gutters gives labels and payload content slightly more horizontal room without changing size, weight, wrapping, or hierarchy.
-- Spacing and layout rhythm: the bright scrollbar widths and the inspector's reserved gutter were removed. Panel boundaries and resizer handles remain visually distinct.
-- Colors and visual tokens: no new colors were introduced. Scroll regions now use the surrounding dark navy surfaces instead of native white macOS/Chromium tracks.
-- Image quality and assets: the working screen has no raster product imagery or custom icon assets. Chart rendering remains sharp and unchanged.
-- Copy and content: no labels, actions, or MQTT data presentation changed.
+- Fonts and typography: the existing Sora/Manrope/Avenir/Segoe stack and hierarchy are unchanged. Secondary controls now consistently use the existing 11px compact text scale.
+- Spacing and layout rhythm: secondary controls use a shared 28px minimum height; panel headers changed from 46px to 40px; toolbar, subscription, timeline, and disclosure gaps/padding were reduced by two pixels where appropriate.
+- Colors and visual tokens: all existing dark-surface, border, accent, and semantic state colors are unchanged. The new sizing token introduces no visual color drift.
+- Image quality and assets: this workspace uses no raster product imagery in the affected regions. The history chart and existing interface rendering remain sharp.
+- Copy and content: no MQTT values, labels, actions, or explanatory text changed.
 
 ## Interaction and accessibility verification
 
-- Electron trackpad scrolling moved the topic tree by more than one viewport while no scrollbar was painted.
-- Topic tree, payload panel, payload viewer, Message History, Timeline, breadcrumb, and connection drawer retain their existing `auto` scrolling behavior.
-- Browser computed styles report `scrollbar-width: none` while `.topic-tree-list` remains `overflow-x: auto; overflow-y: auto` and `.payload-panel` remains `overflow-y: auto`.
-- Keyboard scrolling remains available when a scrollable child or control within it has focus; programmatic scrolling is unaffected.
-- Browser console contained no application errors. The two existing protobufjs/Vite `fs` externalization warnings remain unrelated to this change.
+- Raw, Diff, Json, Hex, Start/Stop History, and the History panel controls remained exposed in the Electron accessibility tree after the sizing pass.
+- Opening and closing Connections preserved the form controls and restored the underlying workspace correctly.
+- In the in-app browser, Collapse removed the History panel and the header History control restored it, confirming the compact controls remain operable.
+- Hidden scroll regions continue to scroll, and no new clipping was visible in the tested desktop states.
+- `npm test` passed all 28 tests, and the production TypeScript/Vite build completed successfully.
 
 ## Findings and comparison history
 
-1. P2 — Native scrollbar tracks visually dominated the dark workspace.
-   - Fix: applied workspace-scoped cross-browser hidden-scrollbar styling using `scrollbar-width: none`, `-ms-overflow-style: none`, and a zero-sized hidden WebKit scrollbar.
-   - Post-fix evidence: the final Electron capture has no visible white tracks or thumbs in any panel.
-2. P2 — The inspector reserved a bright scrollbar gutter even when the thumb was not useful.
-   - Fix: removed `scrollbar-gutter: stable` from the payload panel.
-   - Post-fix evidence: Current Value, Message History, and Retained Editor extend cleanly to the panel edge.
+1. P2 — Raw and Diff were disproportionately large relative to adjacent view-mode controls.
+   - Fix: applied the same 28px compact height, 11px font size, 4px radius, and compact padding to the Compare row.
+   - Post-fix evidence: Raw and Diff match Json and Hex in the final Electron capture.
+2. P2 — Secondary panel actions and sub-bars consumed inconsistent vertical space.
+   - Fix: normalized panel-header buttons, connection controls, timeline controls, subscription bars, and disclosure summaries around the compact control token and tighter spacing.
+   - Post-fix evidence: the final workspace retains all controls while exposing more payload and tree space; the live Connections overlay is visibly shorter and remains readable.
 
-No actionable P0, P1, or P2 issues remain for the requested state.
+No actionable P0, P1, or P2 issues remain for the requested compact-control scope.
 
 ## Follow-up polish
 
-- P3: if keyboard-only users need a stronger spatial cue later, add a very subtle inset fade at scroll boundaries rather than restoring a persistent track.
+- P3: a future responsive pass could selectively abbreviate Sparkplug and MQTT5 labels at very narrow inspector widths to avoid wrapping without reducing desktop readability.

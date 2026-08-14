@@ -8,6 +8,7 @@
   --accent: #2cc6a3;
   --accent-alt: #36a6ff;
   --danger: #ff5f6d;
+  --compact-control-height: 28px;
 }
 
 html,
@@ -154,9 +155,9 @@ p {
 
 .toolbar-action,
 .connection-action {
-  padding: 7px 9px;
+  padding: 6px 8px;
   border-radius: 5px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .toolbar-action {
@@ -217,10 +218,19 @@ p {
   border: 1px solid var(--line);
   border-radius: 7px;
   background: #101923;
-  padding: 10px;
+  padding: 8px;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+}
+
+.connection-toolbar input:not([type="checkbox"]),
+.connection-toolbar select,
+.connection-toolbar button {
+  min-height: var(--compact-control-height);
+  padding: 4px 7px;
+  border-radius: 4px;
+  font-size: 11px;
 }
 
 .toolbar-topline {
@@ -237,7 +247,7 @@ p {
 .toolbar-collapsed {
   display: flex;
   align-items: end;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -252,7 +262,7 @@ p {
     80px
     minmax(130px, 0.8fr)
     minmax(130px, 0.8fr);
-  gap: 8px;
+  gap: 6px;
   align-items: end;
 }
 
@@ -275,7 +285,7 @@ p {
 .toolbar-secondary {
   display: grid;
   grid-template-columns: repeat(3, minmax(220px, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .toolbar-accordion,
@@ -293,7 +303,7 @@ p {
 .timeline-advanced > summary {
   list-style: none;
   cursor: pointer;
-  padding: 8px 10px;
+  padding: 6px 8px;
   color: var(--muted);
   font-size: 11px;
   text-transform: uppercase;
@@ -309,27 +319,27 @@ p {
 
 .subscription-manager {
   display: grid;
-  gap: 8px;
-  padding: 8px 10px 10px;
+  gap: 6px;
+  padding: 6px 8px 8px;
 }
 
 .subscription-controls {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) auto auto;
-  gap: 8px;
+  gap: 6px;
 }
 
 .subscription-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .subscription-advanced {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 8px;
-  padding: 0 10px 10px;
+  gap: 6px;
+  padding: 0 8px 8px;
 }
 
 .subscription-advanced label {
@@ -429,7 +439,7 @@ button:disabled {
 
 .actions {
   display: inline-flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .status-row {
@@ -566,13 +576,20 @@ button:disabled {
 }
 
 .panel-header {
-  min-height: 46px;
-  padding: 8px 10px;
+  min-height: 40px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+}
+
+.panel-header button {
+  min-height: var(--compact-control-height);
+  padding: 4px 7px;
+  border-radius: 4px;
+  font-size: 11px;
 }
 
 .panel-header h2 {
@@ -582,7 +599,7 @@ button:disabled {
 
 .panel-footer {
   border-top: 1px solid var(--line);
-  padding: 8px 12px;
+  padding: 6px 10px;
   color: var(--muted);
   font-size: 12px;
 }
@@ -862,11 +879,6 @@ button:disabled {
   gap: 5px;
 }
 
-.history-panel .panel-header button {
-  padding: 6px 8px;
-  font-size: 11px;
-}
-
 .payload-panel {
   display: grid;
   grid-template-rows: auto auto minmax(220px, 1fr) auto auto;
@@ -936,12 +948,12 @@ button:disabled {
 }
 
 .inspector-section-header {
-  min-height: 42px;
+  min-height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 7px 10px;
+  padding: 5px 10px;
 }
 
 .inspector-section-header h3 {
@@ -959,6 +971,7 @@ button:disabled {
 }
 
 .payload-view-switcher button {
+  min-height: var(--compact-control-height);
   padding: 5px 7px;
   border-radius: 4px;
   font-size: 11px;
@@ -988,9 +1001,17 @@ button:disabled {
 .payload-compare-controls {
   display: grid;
   grid-template-columns: auto auto auto minmax(180px, 1fr);
-  gap: 8px;
+  gap: 4px;
   align-items: center;
-  padding: 0 10px 7px;
+  padding: 0 10px 6px;
+}
+
+.payload-compare-controls button,
+.payload-compare-controls select {
+  min-height: var(--compact-control-height);
+  padding: 4px 7px;
+  border-radius: 4px;
+  font-size: 11px;
 }
 
 .payload-compare-label {
@@ -1022,7 +1043,7 @@ button:disabled {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 8px 12px;
+  padding: 6px 10px;
 }
 
 .payload-history > summary::-webkit-details-marker {
@@ -1098,7 +1119,7 @@ button:disabled {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 8px 12px;
+  padding: 6px 10px;
 }
 
 .retained-editor > summary::-webkit-details-marker {
@@ -1164,15 +1185,26 @@ button:disabled {
   display: grid;
   grid-template-rows: auto 1fr;
   min-height: 0;
-  gap: 8px;
-  padding: 8px 10px 10px;
+  gap: 6px;
+  padding: 6px 8px 8px;
 }
 
 .timeline-controls {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) repeat(4, auto);
-  gap: 8px;
+  gap: 6px;
   align-items: start;
+}
+
+.timeline-controls input,
+.timeline-controls select,
+.timeline-controls button,
+.timeline-row-actions button,
+.timeline-import-actions button {
+  min-height: var(--compact-control-height);
+  padding: 4px 7px;
+  border-radius: 4px;
+  font-size: 11px;
 }
 
 .timeline-file-input {
@@ -1182,7 +1214,7 @@ button:disabled {
 .timeline-grid {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
-  gap: 8px;
+  gap: 6px;
   min-height: 0;
 }
 
@@ -1199,10 +1231,10 @@ button:disabled {
 
 .timeline-row {
   border-bottom: 1px solid rgba(36, 51, 68, 0.5);
-  padding: 8px;
+  padding: 6px 7px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
@@ -1235,9 +1267,9 @@ button:disabled {
 
 .timeline-advanced-grid {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  padding: 0 10px 10px;
+  padding: 0 8px 8px;
 }
 
 .timeline-advanced-grid label {
@@ -1250,7 +1282,7 @@ button:disabled {
 .timeline-import-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
