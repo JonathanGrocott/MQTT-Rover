@@ -53,4 +53,23 @@ describe("topic history storage", () => {
     expect(state.messageHistoryByTopic.has(topic)).toBe(false);
     expect(state.historyByTopic.has(topic)).toBe(false);
   });
+
+  it("publishes a new chart series reference when another value arrives", () => {
+    const topic = "factory/line-1/flow";
+    const store = useAppStore.getState();
+    store.toggleHistoryForTopic(topic);
+    store.ingestMessages([message(topic, 1)]);
+
+    const firstSeries = useAppStore.getState().historyByTopic.get(topic);
+    expect(firstSeries).toEqual([{ timestamp: 1, value: 1 }]);
+
+    useAppStore.getState().ingestMessages([message(topic, 2)]);
+    const secondSeries = useAppStore.getState().historyByTopic.get(topic);
+
+    expect(secondSeries).not.toBe(firstSeries);
+    expect(secondSeries).toEqual([
+      { timestamp: 1, value: 1 },
+      { timestamp: 2, value: 2 }
+    ]);
+  });
 });

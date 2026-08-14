@@ -152,7 +152,16 @@ export default function App() {
         historyOpen={!historyCollapsed}
         onToggleConnections={() => setConnectionsCollapsed((current) => !current)}
         onTogglePublish={() => setPublishCollapsed((current) => !current)}
-        onToggleHistory={() => setHistoryCollapsed((current) => !current)}
+        onToggleHistory={() => {
+          if (historyCollapsed) {
+            setRightPanelView("history");
+            setHistoryCollapsed(false);
+            setFocusPanel("none");
+            return;
+          }
+          setHistoryCollapsed(true);
+          setFocusPanel("none");
+        }}
         onConnect={connect}
         onDisconnect={disconnect}
       />
@@ -212,11 +221,6 @@ export default function App() {
             historyEnabled={selectedHistoryEnabled}
             onToggleHistory={() => {
               if (selectedTopic) {
-                if (!selectedHistoryEnabled) {
-                  setHistoryCollapsed(false);
-                  setRightPanelView("history");
-                  setFocusPanel("none");
-                }
                 toggleHistoryForTopic(selectedTopic);
               }
             }}
@@ -285,6 +289,7 @@ export default function App() {
               <HistoryPanel
                 topic={selectedTopic}
                 data={selectedHistory}
+                historyEnabled={selectedHistoryEnabled}
                 collapsed={false}
                 focused={focusPanel === "history"}
                 onToggleCollapsed={() => {

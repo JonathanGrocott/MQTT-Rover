@@ -328,6 +328,7 @@ export const useAppStore = create<AppState>()(
 
         const topics = new Map(get().topics);
         const historyByTopic = new Map(get().historyByTopic);
+        const updatedHistorySeries = new Map<string, HistoryPoint[]>();
         const messageHistoryByTopic = new Map(get().messageHistoryByTopic);
         const enabledHistory = get().historyEnabledTopics;
         const newTopics: string[] = [];
@@ -378,9 +379,10 @@ export const useAppStore = create<AppState>()(
 
             const numeric = tryExtractNumericValue(message.payload);
             if (numeric !== null) {
-              let series = historyByTopic.get(message.topic);
+              let series = updatedHistorySeries.get(message.topic);
               if (!series) {
-                series = [];
+                series = [...(historyByTopic.get(message.topic) ?? [])];
+                updatedHistorySeries.set(message.topic, series);
                 historyByTopic.set(message.topic, series);
               }
               series.push({ timestamp: message.timestamp, value: numeric });

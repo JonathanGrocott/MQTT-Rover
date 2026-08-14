@@ -12,6 +12,7 @@ import { HistoryPoint } from "../store/useAppStore";
 interface Props {
   topic: string | null;
   data: HistoryPoint[];
+  historyEnabled: boolean;
   collapsed: boolean;
   focused: boolean;
   onToggleCollapsed: () => void;
@@ -22,6 +23,7 @@ interface Props {
 export function HistoryPanel({
   topic,
   data,
+  historyEnabled,
   collapsed,
   focused,
   onToggleCollapsed,
@@ -48,6 +50,11 @@ export function HistoryPanel({
         <div className="empty-state">History panel collapsed.</div>
       ) : !topic ? (
         <div className="empty-state">Select a topic and click Start History.</div>
+      ) : !historyEnabled ? (
+        <div className="empty-state">
+          History is not recording for <strong>{topic}</strong>. Click Start History
+          in the Topic Inspector to begin.
+        </div>
       ) : data.length === 0 ? (
         <div className="empty-state">
           Waiting for numeric values on <strong>{topic}</strong>
